@@ -55,7 +55,11 @@
 #define PLUGIN_AUTHOR   "local"
 
 #define MAXP            33
-#define HUD_INTERVAL    0.01    // at most one update per 10 ms per viewed player
+// DHUD (director) messages are STACK-based, not channel-based (amxmodx.inc, show_dhudmessage:
+// "You can have up to 8 messages displaying at once"): a new one never replaces the old one.
+// So the HUD is redrawn at a fixed interval with holdtime == interval, keeping exactly one
+// message alive. (gcljs sends one per usercmd with hold 0.02, i.e. two stacked messages with
+// different numbers -> the overlapping digits.)
 
 new g_pEnable, g_pX, g_pY, g_pColor, g_pFogMax, g_pKeep, g_pHold, g_pFogMode, g_pDebug, g_pShowDuck;
 
@@ -85,7 +89,7 @@ public plugin_init()
 	g_pColor   = create_cvar("speed_hud_color", "255 255 255", FCVAR_NONE, "HUD color R G B");
 	g_pFogMax  = create_cvar("speed_hud_fog_max", "8", FCVAR_NONE, "Show FOG only when <= this (gcljs MAX_BHOP_FRAMES = 8)", true, 0.0, true, 1000.0);
 	g_pKeep    = create_cvar("speed_hud_keep", "0", FCVAR_NONE, "1 = keep the last takeoff speed after landing", true, 0.0, true, 1.0);
-	g_pHold    = create_cvar("speed_hud_hold", "0.02", FCVAR_NONE, "DHUD hold time per update (gcljs uses 0.02)", true, 0.01, true, 1.0);
+	g_pHold    = create_cvar("speed_hud_hold", "0.05", FCVAR_NONE, "HUD update interval = DHUD hold time (equal, so messages never stack)", true, 0.01, true, 1.0);
 	g_pFogMode = create_cvar("speed_hud_fog_mode", "1", FCVAR_NONE, "1 = FOG whose speed you got (fog_practice src), 0 = frame you left the ground on", true, 0.0, true, 1.0);
 	g_pDebug   = create_cvar("speed_hud_debug", "0", FCVAR_NONE, "1 = log each takeoff (SPDJ) to addons/amxmodx/logs/fog_debug.log", true, 0.0, true, 1.0);
 	g_pShowDuck = create_cvar("speed_hud_duck", "1", FCVAR_NONE, "1 = show D: frames ducked in the air before the landing", true, 0.0, true, 1.0);
@@ -181,7 +185,10 @@ speed_menu_show(id, page)
 	num_to_str(SM_ITEM_COLOR, info, charsmax(info));
 	menu_additem(menu, item, info, ADMIN_CVAR);
 
-	formatex(item, charsmax(item), "Height: \y%.2f", get_pcvar_float(g_pY));
+	new ynum[16];
+	speed_fmt3(get_pcvar_float(g_pY), ynum, charsmax(ynum));
+	ynum[4] = 0;    // "0.700" -> "0.70"
+	formatex(item, charsmax(item), "Height: \y%s", ynum);
 	num_to_str(SM_ITEM_Y, info, charsmax(info));
 	menu_additem(menu, item, info, ADMIN_CVAR);
 
@@ -290,12 +297,30 @@ speed_save_cfg()
 	fprintf(f, "speed_hud_duck %d^n", get_pcvar_num(g_pShowDuck));
 	fprintf(f, "speed_hud_keep %d^n", get_pcvar_num(g_pKeep));
 	fprintf(f, "speed_hud_color ^"%s^"^n", color);
-	fprintf(f, "speed_hud_x %.2f^n", get_pcvar_float(g_pX));
-	fprintf(f, "speed_hud_y %.2f^n", get_pcvar_float(g_pY));
+	new num[16];
+	speed_fmt3(get_pcvar_float(g_pX), num, charsmax(num));
+	fprintf(f, "speed_hud_x %s^n", num);
+	speed_fmt3(get_pcvar_float(g_pY), num, charsmax(num));
+	fprintf(f, "speed_hud_y %s^n", num);
 	fprintf(f, "speed_hud_fog_max %d^n", get_pcvar_num(g_pFogMax));
-	fprintf(f, "speed_hud_hold %.2f^n", get_pcvar_float(g_pHold));
+	speed_fmt3(get_pcvar_float(g_pHold), num, charsmax(num));
+	fprintf(f, "speed_hud_hold %s^n", num);
 	fprintf(f, "speed_hud_debug %d^n", get_pcvar_num(g_pDebug));
 	fclose(f);
+}
+
+// AMXX's "%.2f" truncates (0.70 is stored as 0.6999.. and printed "0.69"), so round to
+// 3 decimals ourselves.
+speed_fmt3(Float:v, out[], len)
+{
+	new m = floatround(v * 1000.0);
+	new sign[2];
+	if (m < 0)
+	{
+		sign[0] = '-';
+		m = -m;
+	}
+	formatex(out, len, "%s%d.%03d", sign, m / 1000, m % 1000);
 }
 
 public client_putinserver(id)
@@ -445,10 +470,13 @@ speed_draw(id, const Float:vel[3])
 	if (!get_pcvar_num(g_pEnable))
 		return;
 
+	// gametime here is the client's svtimebase (set before PostThink in SV_RunCmd), +10 ms per cmd;
+	// the 0.001 tolerance keeps float rounding from skipping a due update.
+	new Float:hold = get_pcvar_float(g_pHold);
 	new Float:now = get_gametime();
-	if (now < g_fNextHud[id] && now > g_fNextHud[id] - 1.0)
+	if (now + 0.001 < g_fNextHud[id] && now > g_fNextHud[id] - 1.0)
 		return;
-	g_fNextHud[id] = now + HUD_INTERVAL;
+	g_fNextHud[id] = now + hold;
 
 	new text[96];
 	formatex(text, charsmax(text), "%d", floatround(floatsqroot(vel[0] * vel[0] + vel[1] * vel[1])));
@@ -477,7 +505,6 @@ speed_draw(id, const Float:vel[3])
 	new b = clamp(str_to_num(rgb[2]), 0, 255);
 	new Float:x = get_pcvar_float(g_pX);
 	new Float:y = get_pcvar_float(g_pY);
-	new Float:hold = get_pcvar_float(g_pHold);
 
 	// the player, plus spectators in first-person / chase on this player (pev_iuser2 == id)
 	for (new viewer = 1; viewer < MAXP; viewer++)
