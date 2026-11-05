@@ -294,10 +294,8 @@ public cmd_fog(id)
 {
 	g_bOn[id] = !g_bOn[id];
 	fog_reset(id);
-	if (g_bOn[id])
-		client_print(id, print_chat, "[FOG] best-of-FOG correction ON for you (practice only, NOT legit for records).");
-	else
-		client_print(id, print_chat, "[FOG] best-of-FOG correction OFF for you. Normal CS physics.");
+	// same style as the KZ Rush plugin's toggles, e.g. "^4[KZ]^1 Noclip:^3 enabled"
+	client_print_color(id, print_team_default, "^4[KZ]^1 Fog Practice:^3 %s", g_bOn[id] ? "enabled" : "disabled");
 	return PLUGIN_HANDLED;
 }
 
