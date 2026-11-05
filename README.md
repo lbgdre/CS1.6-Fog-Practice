@@ -88,5 +88,4 @@ Technical details are in [docs/TECHNICAL.md](docs/TECHNICAL.md).
 
 ## Credits
 
-- Physics references: [ReGameDLL_CS](https://github.com/s1lentq/ReGameDLL_CS) and [ReHLDS](https://github.com/dreamstalker/rehlds).
-- The speed HUD layout follows the speed panel of [gcljs](https://bitbucket.org/GameChaos/gcljs) by GameChaos. No gcljs code is used.
+* The speed HUD layout follows the speed panel of [gcljs](https://bitbucket.org/GameChaos/gcljs) by GameChaos.
