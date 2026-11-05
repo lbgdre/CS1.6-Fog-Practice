@@ -294,8 +294,12 @@ public cmd_fog(id)
 {
 	g_bOn[id] = !g_bOn[id];
 	fog_reset(id);
-	// same style as the KZ Rush plugin's toggles, e.g. "^4[KZ]^1 Noclip:^3 enabled"
-	client_print_color(id, print_team_default, "^4[KZ]^1 Fog Practice:^3 %s", g_bOn[id] ? "enabled" : "disabled");
+	// KZ Rush style toggle: "[KZ]" and the state in the same color, light blue when enabled,
+	// red when disabled ("^3" = sender team color; sender forced to blue / red team)
+	if (g_bOn[id])
+		client_print_color(id, print_team_blue, "^3[KZ]^1 Fog Practice:^3 enabled");
+	else
+		client_print_color(id, print_team_red, "^3[KZ]^1 Fog Practice:^3 disabled");
 	return PLUGIN_HANDLED;
 }
 
