@@ -90,7 +90,7 @@ public plugin_init()
 	g_pColor   = create_cvar("speed_hud_color", "255 255 255", FCVAR_NONE, "HUD color R G B");
 	g_pFogMax  = create_cvar("speed_hud_fog_max", "8", FCVAR_NONE, "Show FOG only when <= this (gcljs MAX_BHOP_FRAMES = 8)", true, 0.0, true, 1000.0);
 	g_pKeep    = create_cvar("speed_hud_keep", "0", FCVAR_NONE, "1 = keep the last takeoff speed after landing", true, 0.0, true, 1.0);
-	g_pHold    = create_cvar("speed_hud_hold", "0.02", FCVAR_NONE, "Big-font (DHUD) refresh interval = hold time; lower = smoother but may stack", true, 0.01, true, 1.0);
+	g_pHold    = create_cvar("speed_hud_hold", "0.03", FCVAR_NONE, "Big-font (DHUD) refresh interval = hold time; lower = smoother but may stack", true, 0.01, true, 1.0);
 	g_pStyle   = create_cvar("speed_hud_style", "0", FCVAR_NONE, "0 = big font (DHUD), 1 = normal HUD font (redraws every usercmd, never overlaps)", true, 0.0, true, 1.0);
 	g_hSync    = CreateHudSyncObj();
 	g_pFogMode = create_cvar("speed_hud_fog_mode", "1", FCVAR_NONE, "1 = FOG whose speed you got (fog_practice src), 0 = frame you left the ground on", true, 0.0, true, 1.0);
