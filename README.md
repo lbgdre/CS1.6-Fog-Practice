@@ -60,7 +60,7 @@ To rebuild from source, run `amxxpc fog_practice.sma` and `amxxpc speed_hud.sma`
 | `speed_hud_color` | "255 255 255" | |
 | `speed_hud_fog_max` | 8 | hide FOG above this |
 | `speed_hud_fog_mode` | 1 | 1 = FOG whose speed you got (`FOG: 2 (f3)` after a rewrite), 0 = frame you left the ground on |
-| `speed_hud_duck` | 1 | show `DUCK: n` (usercmds ducked in the air before the landing) |
+| `speed_hud_duck` | 1 | show `D: n` (usercmds ducked in the air before the landing) |
 | `speed_hud_keep` | 0 | keep the takeoff line after landing |
 | `speed_hud_hold` | 0.02 | DHUD hold time |
 | `speed_hud_debug` | 0 | log `SPDJ` lines next to fog_practice's `FOGJ` |
@@ -69,7 +69,7 @@ To rebuild from source, run `amxxpc fog_practice.sma` and `amxxpc speed_hud.sma`
 
 Each plugin has its own menu.
 - **`/fogmenu`** (fog_practice): plugin for me, plugin for everyone, best of FOG 1 to N, rewrite uses earlier jump height, debug output on/off.
-- **`/speedmenu`** (speed_hud): my HUD, HUD for everyone, what FOG shows, the DUCK line, keep takeoff after landing, color, height, horizontal position, show FOG up to, debug log.
+- **`/speedmenu`** (speed_hud): HUD on/off, what FOG shows, the D (duck) line, color, height (0.55-0.85 in 0.05 steps), horizontal position, show FOG up to, debug log.
 
 "For me" items work for everyone. Server-wide items need cvar access (flag `g`). On a listen server the host has it.
 Menu changes are saved to `addons/amxmodx/configs/fog_practice.cfg` and `speed_hud.cfg`, which are loaded on every map start. Delete those files to reset to defaults.

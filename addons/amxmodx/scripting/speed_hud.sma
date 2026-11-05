@@ -36,7 +36,7 @@
  *              the takeoff frame.
  *   ladder jump = started on a ladder (MOVETYPE_FLY), ended walking in the air with IN_JUMP held;
  *              shown without FOG (like gcljs).
- *   DUCK: n  = on a bhop takeoff (FOG shown): length of your last continuous duck in the air
+ *   D: n     = on a bhop takeoff (FOG shown): length of your last continuous duck in the air
  *              before the landing that this jump came from, in usercmds (msec > 0) with IN_DUCK
  *              held; the landing usercmd counts as an air frame (it starts in the air).
  *              In the air PM_Duck completes a duck immediately (pm_shared.cpp PM_Duck: "Finish
@@ -88,7 +88,7 @@ public plugin_init()
 	g_pHold    = create_cvar("speed_hud_hold", "0.02", FCVAR_NONE, "DHUD hold time per update (gcljs uses 0.02)", true, 0.01, true, 1.0);
 	g_pFogMode = create_cvar("speed_hud_fog_mode", "1", FCVAR_NONE, "1 = FOG whose speed you got (fog_practice src), 0 = frame you left the ground on", true, 0.0, true, 1.0);
 	g_pDebug   = create_cvar("speed_hud_debug", "0", FCVAR_NONE, "1 = log each takeoff (SPDJ) to addons/amxmodx/logs/fog_debug.log", true, 0.0, true, 1.0);
-	g_pShowDuck = create_cvar("speed_hud_duck", "1", FCVAR_NONE, "1 = show DUCK: frames ducked in the air before the landing", true, 0.0, true, 1.0);
+	g_pShowDuck = create_cvar("speed_hud_duck", "1", FCVAR_NONE, "1 = show D: frames ducked in the air before the landing", true, 0.0, true, 1.0);
 
 	register_forward(FM_CmdStart, "fw_CmdStart", 0);
 	register_forward(FM_CmdEnd, "fw_CmdEnd_Post", 1);
@@ -118,13 +118,15 @@ public plugin_cfg()
 // (the listen-server host has it). Saved to addons/amxmodx/configs/speed_hud.cfg.
 enum
 {
-	SM_ITEM_ME = 1, SM_ITEM_ENABLE, SM_ITEM_FOGMODE, SM_ITEM_DUCK, SM_ITEM_KEEP, SM_ITEM_COLOR,
-	SM_ITEM_Y, SM_ITEM_X, SM_ITEM_FOGMAX, SM_ITEM_DEBUG, SM_ITEM_FOGMENU
+	SM_ITEM_ENABLE = 1, SM_ITEM_FOGMODE, SM_ITEM_DUCK, SM_ITEM_COLOR, SM_ITEM_Y, SM_ITEM_X,
+	SM_ITEM_FOGMAX, SM_ITEM_DEBUG
 };
 
 new const g_szColorName[][] = { "white", "green", "yellow", "cyan", "orange", "red", "pink" };
 new const g_szColorRGB[][]  = { "255 255 255", "0 255 0", "255 255 0", "0 255 255", "255 128 0", "255 0 0", "255 105 180" };
-new const Float:g_fYSteps[] = { 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85 };
+#define Y_MIN   0.55
+#define Y_MAX   0.85
+#define Y_STEP  0.05
 new const Float:g_fXSteps[] = { -1.0, 0.05, 0.75 };
 new const g_szXName[][]     = { "center", "left", "right" };
 new const g_iFogMaxSteps[]  = { 3, 5, 8, 10 };
@@ -163,11 +165,7 @@ speed_menu_show(id, page)
 	new ci = speed_color_index();
 	new xi = speed_x_index();
 
-	formatex(item, charsmax(item), "My HUD: %s", g_bOn[id] ? "\yON" : "\rOFF");
-	num_to_str(SM_ITEM_ME, info, charsmax(info));
-	menu_additem(menu, item, info);
-
-	formatex(item, charsmax(item), "HUD for everyone: %s", get_pcvar_num(g_pEnable) ? "\yON" : "\rOFF");
+	formatex(item, charsmax(item), "HUD: %s", get_pcvar_num(g_pEnable) ? "\yON" : "\rOFF");
 	num_to_str(SM_ITEM_ENABLE, info, charsmax(info));
 	menu_additem(menu, item, info, ADMIN_CVAR);
 
@@ -177,10 +175,6 @@ speed_menu_show(id, page)
 
 	formatex(item, charsmax(item), "DUCK line: %s", get_pcvar_num(g_pShowDuck) ? "\yON" : "\rOFF");
 	num_to_str(SM_ITEM_DUCK, info, charsmax(info));
-	menu_additem(menu, item, info, ADMIN_CVAR);
-
-	formatex(item, charsmax(item), "Keep takeoff after landing: %s", get_pcvar_num(g_pKeep) ? "\yON" : "\rOFF");
-	num_to_str(SM_ITEM_KEEP, info, charsmax(info));
 	menu_additem(menu, item, info, ADMIN_CVAR);
 
 	formatex(item, charsmax(item), "Color: \y%s", (ci >= 0) ? g_szColorName[ci] : "custom");
@@ -199,12 +193,9 @@ speed_menu_show(id, page)
 	num_to_str(SM_ITEM_FOGMAX, info, charsmax(info));
 	menu_additem(menu, item, info, ADMIN_CVAR);
 
-	formatex(item, charsmax(item), "Debug log (SPDJ): %s", get_pcvar_num(g_pDebug) ? "\yON" : "\rOFF");
+	formatex(item, charsmax(item), "Debug log: %s", get_pcvar_num(g_pDebug) ? "\yON" : "\rOFF");
 	num_to_str(SM_ITEM_DEBUG, info, charsmax(info));
 	menu_additem(menu, item, info, ADMIN_CVAR);
-
-	num_to_str(SM_ITEM_FOGMENU, info, charsmax(info));
-	menu_additem(menu, "Open FOG practice menu \d(/fogmenu)", info);
 
 	menu_setprop(menu, MPROP_EXIT, MEXIT_ALL);
 	menu_display(id, menu, page);
@@ -233,15 +224,9 @@ public speed_menu_handler(id, menu, item)
 	new bool:save = true;
 	switch (str_to_num(info))
 	{
-		case SM_ITEM_ME:
-		{
-			g_bOn[id] = !g_bOn[id];
-			save = false;
-		}
 		case SM_ITEM_ENABLE:  set_pcvar_num(g_pEnable, get_pcvar_num(g_pEnable) ? 0 : 1);
 		case SM_ITEM_FOGMODE: set_pcvar_num(g_pFogMode, get_pcvar_num(g_pFogMode) ? 0 : 1);
 		case SM_ITEM_DUCK:    set_pcvar_num(g_pShowDuck, get_pcvar_num(g_pShowDuck) ? 0 : 1);
-		case SM_ITEM_KEEP:    set_pcvar_num(g_pKeep, get_pcvar_num(g_pKeep) ? 0 : 1);
 		case SM_ITEM_COLOR:
 		{
 			new ci = speed_color_index();
@@ -249,16 +234,13 @@ public speed_menu_handler(id, menu, item)
 		}
 		case SM_ITEM_Y:
 		{
+			// next 0.05 step above the current value, wrapping 0.85 -> 0.55
 			new Float:y = get_pcvar_float(g_pY);
-			new Float:next = g_fYSteps[0];
-			for (new i = 0; i < sizeof(g_fYSteps); i++)
-			{
-				if (g_fYSteps[i] > y + 0.001)
-				{
-					next = g_fYSteps[i];
-					break;
-				}
-			}
+			// +0.01 tolerance: 0.70 is stored as 0.6999.., a plain floor would stay on 0.70
+			new k = floatround((y - Y_MIN) / Y_STEP + 0.01, floatround_floor) + 1;
+			new Float:next = Y_MIN + float(k) * Y_STEP;
+			if (next < Y_MIN || next > Y_MAX + 0.001)
+				next = Y_MIN;
 			set_pcvar_float(g_pY, next);
 		}
 		case SM_ITEM_X:
@@ -281,11 +263,6 @@ public speed_menu_handler(id, menu, item)
 			set_pcvar_num(g_pFogMax, next);
 		}
 		case SM_ITEM_DEBUG:   set_pcvar_num(g_pDebug, get_pcvar_num(g_pDebug) ? 0 : 1);
-		case SM_ITEM_FOGMENU:
-		{
-			client_cmd(id, "fogmenu");
-			return PLUGIN_HANDLED;
-		}
 	}
 	if (save)
 		speed_save_cfg();
@@ -486,7 +463,7 @@ speed_draw(id, const Float:vel[3])
 			else
 				format(text, charsmax(text), "%s^n(%.2f)^nFOG: %d", text, g_fTakeoff[id], fog);
 			if (g_iTakeoffDuck[id] >= 0 && get_pcvar_num(g_pShowDuck))
-				format(text, charsmax(text), "%s^nDUCK: %d", text, g_iTakeoffDuck[id]);
+				format(text, charsmax(text), "%s^nD: %d", text, g_iTakeoffDuck[id]);
 		}
 		else
 			format(text, charsmax(text), "%s^n(%.2f)", text, g_fTakeoff[id]);

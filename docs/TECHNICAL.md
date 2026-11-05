@@ -36,7 +36,7 @@ current speed, then `(takeoff speed)` and `FOG: n` while airborne. Spectators wa
   - It's queried from fog_practice's `fog_api_src` via `callfunc`, so there's no hard dependency.
   - After a backward rewrite it reads `FOG: 2 (f3)`: FOG 2's speed, but you left the ground on frame 3.
   - `speed_hud_fog_mode 0` shows the takeoff frame only. That is also what you get without fog_practice.
-- **DUCK: n** is shown on a bhop takeoff, under FOG. It is the length of your last continuous duck in the air before the landing this jump came from.
+- **D: n** (duck) is shown on a bhop takeoff, under FOG. It is the length of your last continuous duck in the air before the landing this jump came from.
   - It counts usercmds with IN_DUCK held. The landing usercmd counts, because it starts in the air.
   - 0 means you didn't duck in the air before that landing.
   - `speed_hud_duck 0` hides it.
