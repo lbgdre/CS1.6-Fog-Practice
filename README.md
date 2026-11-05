@@ -43,6 +43,7 @@ To rebuild from source, run `amxxpc fog_practice.sma` and `amxxpc speed_hud.sma`
 | Name | Default | |
 |---|---|---|
 | `say /fog` | | toggle for yourself |
+| `say /fogmenu` (or console `fogmenu`) | | settings menu |
 | `fog_enable` | 1 | master switch |
 | `fog_max` | 3 | highest FOG considered (1-3) |
 | `fog_fix_vz` | 1 | on a backward rewrite, also use the earlier frame's jump height |
@@ -53,6 +54,7 @@ To rebuild from source, run `amxxpc fog_practice.sma` and `amxxpc speed_hud.sma`
 | Name | Default | |
 |---|---|---|
 | `say /speedhud` | | toggle for yourself |
+| `say /speedmenu` (or console `speedmenu`) | | settings menu |
 | `speed_hud_enable` | 1 | |
 | `speed_hud_x` / `speed_hud_y` | -1.0 / 0.7 | position |
 | `speed_hud_color` | "255 255 255" | |
@@ -62,6 +64,15 @@ To rebuild from source, run `amxxpc fog_practice.sma` and `amxxpc speed_hud.sma`
 | `speed_hud_keep` | 0 | keep the takeoff line after landing |
 | `speed_hud_hold` | 0.02 | DHUD hold time |
 | `speed_hud_debug` | 0 | log `SPDJ` lines next to fog_practice's `FOGJ` |
+
+### Menus
+
+Each plugin has its own menu, and each menu has a shortcut to the other one.
+- **`/fogmenu`** (fog_practice): correction for me, plugin on/off for everyone, best of FOG 1 to N, rewrite jump height, debug output, show the records reminder.
+- **`/speedmenu`** (speed_hud): my HUD, HUD for everyone, what FOG shows, the DUCK line, keep takeoff after landing, color, height, horizontal position, show FOG up to, debug log.
+
+"For me" items work for everyone. Server-wide items need cvar access (flag `g`). On a listen server the host has it.
+Menu changes are saved to `addons/amxmodx/configs/fog_practice.cfg` and `speed_hud.cfg`, which are loaded on every map start. Delete those files to reset to defaults.
 
 ## How fog_practice works (short)
 
@@ -97,4 +108,4 @@ python tools/fog_reference.py check <Half-Life>\cstrike\addons\amxmodx\logs\fog_
 ## Credits
 
 - Physics references (read-only): [ReGameDLL_CS](https://github.com/s1lentq/ReGameDLL_CS) and [ReHLDS](https://github.com/dreamstalker/rehlds).
-- The speed_hud layout follows the gcljs jumpstats speed panel by GameChaos. No code was copied.
+- The speed_hud layout follows the speed panel of [gcljs](https://bitbucket.org/GameChaos/gcljs) by GameChaos. No gcljs code is used; the jump detection is new.

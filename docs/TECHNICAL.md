@@ -60,6 +60,7 @@ current speed, then `(takeoff speed)` and `FOG: n` while airborne. Spectators wa
 | `fog_fix_vz` | 1 | on a backward rewrite, also use the earlier frame's jump vz (from that frame's fuser2) |
 | `fog_debug` | 0 | 1 = one summary line per jump to console + full detail to the log; 2 = full detail to console too |
 | `say /fog` | | toggle the correction for yourself |
+| `say /fogmenu` | | settings menu (saved to `configs/fog_practice.cfg`); speed_hud has `/speedmenu` (saved to `configs/speed_hud.cfg`) |
 
 ## What the source says (and why the design differs from "set_uc in CmdStart")
 

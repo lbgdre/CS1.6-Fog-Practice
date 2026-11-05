@@ -1,5 +1,11 @@
 /*
- * speed_hud.sma - standalone speedometer + takeoff speed + FOG, layout after gcljs's speed panel:
+ * speed_hud.sma - standalone speedometer + takeoff speed + FOG.
+ *
+ * Credit: the HUD layout (centered DHUD at y 0.7, speed / (takeoff speed) / FOG: n, 0.02 hold,
+ * FOG shown up to 8) follows the speed panel of gcljs by GameChaos
+ * (https://bitbucket.org/GameChaos/gcljs). No gcljs code is used; the detection logic is new.
+ *
+ * Layout:
  *
  *        312              <- current horizontal speed (integer)
  *      (261.30)           <- takeoff speed of the current jump (shown while airborne)
@@ -39,12 +45,13 @@
  */
 
 #include <amxmodx>
+#include <amxmisc>
 #include <fakemeta>
 
 #pragma semicolon 1
 
 #define PLUGIN_NAME     "Speed HUD"
-#define PLUGIN_VERSION  "1.2.0"
+#define PLUGIN_VERSION  "1.3.0"
 #define PLUGIN_AUTHOR   "local"
 
 #define MAXP            33
@@ -89,6 +96,229 @@ public plugin_init()
 	register_clcmd("say /speedhud", "cmd_toggle");
 	register_clcmd("say_team /speedhud", "cmd_toggle");
 	register_clcmd("speedhud", "cmd_toggle");
+	register_clcmd("say /speedmenu", "cmd_speedmenu");
+	register_clcmd("say_team /speedmenu", "cmd_speedmenu");
+	register_clcmd("speedmenu", "cmd_speedmenu");
+}
+
+public plugin_cfg()
+{
+	// settings saved by /speedmenu
+	new path[128];
+	speed_cfg_path(path, charsmax(path));
+	if (file_exists(path))
+	{
+		server_cmd("exec ^"%s^"", path);
+		server_exec();
+	}
+}
+
+// =============================================================================================
+// /speedmenu. "My HUD" is per player; the rest are server-wide cvars and need ADMIN_CVAR
+// (the listen-server host has it). Saved to addons/amxmodx/configs/speed_hud.cfg.
+enum
+{
+	SM_ITEM_ME = 1, SM_ITEM_ENABLE, SM_ITEM_FOGMODE, SM_ITEM_DUCK, SM_ITEM_KEEP, SM_ITEM_COLOR,
+	SM_ITEM_Y, SM_ITEM_X, SM_ITEM_FOGMAX, SM_ITEM_DEBUG, SM_ITEM_FOGMENU
+};
+
+new const g_szColorName[][] = { "white", "green", "yellow", "cyan", "orange", "red", "pink" };
+new const g_szColorRGB[][]  = { "255 255 255", "0 255 0", "255 255 0", "0 255 255", "255 128 0", "255 0 0", "255 105 180" };
+new const Float:g_fYSteps[] = { 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85 };
+new const Float:g_fXSteps[] = { -1.0, 0.05, 0.75 };
+new const g_szXName[][]     = { "center", "left", "right" };
+new const g_iFogMaxSteps[]  = { 3, 5, 8, 10 };
+
+public cmd_speedmenu(id)
+{
+	speed_menu_show(id, 0);
+	return PLUGIN_HANDLED;
+}
+
+speed_color_index()
+{
+	new color[16];
+	get_pcvar_string(g_pColor, color, charsmax(color));
+	for (new i = 0; i < sizeof(g_szColorRGB); i++)
+		if (equal(color, g_szColorRGB[i]))
+			return i;
+	return -1;
+}
+
+speed_x_index()
+{
+	new Float:x = get_pcvar_float(g_pX);
+	for (new i = 0; i < sizeof(g_fXSteps); i++)
+		if (floatabs(x - g_fXSteps[i]) < 0.001)
+			return i;
+	return -1;
+}
+
+speed_menu_show(id, page)
+{
+	new title[128];
+	formatex(title, charsmax(title), "\ySpeed HUD \dv%s", PLUGIN_VERSION);
+	new menu = menu_create(title, "speed_menu_handler");
+	new item[96], info[4];
+	new ci = speed_color_index();
+	new xi = speed_x_index();
+
+	formatex(item, charsmax(item), "My HUD: %s", g_bOn[id] ? "\yON" : "\rOFF");
+	num_to_str(SM_ITEM_ME, info, charsmax(info));
+	menu_additem(menu, item, info);
+
+	formatex(item, charsmax(item), "HUD for everyone: %s", get_pcvar_num(g_pEnable) ? "\yON" : "\rOFF");
+	num_to_str(SM_ITEM_ENABLE, info, charsmax(info));
+	menu_additem(menu, item, info, ADMIN_CVAR);
+
+	formatex(item, charsmax(item), "FOG shows: \y%s", get_pcvar_num(g_pFogMode) ? "frame of your speed" : "frame you left on");
+	num_to_str(SM_ITEM_FOGMODE, info, charsmax(info));
+	menu_additem(menu, item, info, ADMIN_CVAR);
+
+	formatex(item, charsmax(item), "DUCK line: %s", get_pcvar_num(g_pShowDuck) ? "\yON" : "\rOFF");
+	num_to_str(SM_ITEM_DUCK, info, charsmax(info));
+	menu_additem(menu, item, info, ADMIN_CVAR);
+
+	formatex(item, charsmax(item), "Keep takeoff after landing: %s", get_pcvar_num(g_pKeep) ? "\yON" : "\rOFF");
+	num_to_str(SM_ITEM_KEEP, info, charsmax(info));
+	menu_additem(menu, item, info, ADMIN_CVAR);
+
+	formatex(item, charsmax(item), "Color: \y%s", (ci >= 0) ? g_szColorName[ci] : "custom");
+	num_to_str(SM_ITEM_COLOR, info, charsmax(info));
+	menu_additem(menu, item, info, ADMIN_CVAR);
+
+	formatex(item, charsmax(item), "Height: \y%.2f", get_pcvar_float(g_pY));
+	num_to_str(SM_ITEM_Y, info, charsmax(info));
+	menu_additem(menu, item, info, ADMIN_CVAR);
+
+	formatex(item, charsmax(item), "Horizontal: \y%s", (xi >= 0) ? g_szXName[xi] : "custom");
+	num_to_str(SM_ITEM_X, info, charsmax(info));
+	menu_additem(menu, item, info, ADMIN_CVAR);
+
+	formatex(item, charsmax(item), "Show FOG up to: \y%d", get_pcvar_num(g_pFogMax));
+	num_to_str(SM_ITEM_FOGMAX, info, charsmax(info));
+	menu_additem(menu, item, info, ADMIN_CVAR);
+
+	formatex(item, charsmax(item), "Debug log (SPDJ): %s", get_pcvar_num(g_pDebug) ? "\yON" : "\rOFF");
+	num_to_str(SM_ITEM_DEBUG, info, charsmax(info));
+	menu_additem(menu, item, info, ADMIN_CVAR);
+
+	num_to_str(SM_ITEM_FOGMENU, info, charsmax(info));
+	menu_additem(menu, "Open FOG practice menu \d(/fogmenu)", info);
+
+	menu_setprop(menu, MPROP_EXIT, MEXIT_ALL);
+	menu_display(id, menu, page);
+}
+
+public speed_menu_handler(id, menu, item)
+{
+	if (item == MENU_EXIT || item < 0)
+	{
+		menu_destroy(menu);
+		return PLUGIN_HANDLED;
+	}
+
+	new info[4], access, callback;
+	menu_item_getinfo(menu, item, access, info, charsmax(info), _, _, callback);
+	menu_destroy(menu);
+	new page = item / 7;     // newmenus default: 7 items per page
+
+	if (access && !(get_user_flags(id) & access))
+	{
+		client_print(id, print_chat, "[Speed HUD] You need cvar access to change server-wide settings.");
+		speed_menu_show(id, page);
+		return PLUGIN_HANDLED;
+	}
+
+	new bool:save = true;
+	switch (str_to_num(info))
+	{
+		case SM_ITEM_ME:
+		{
+			g_bOn[id] = !g_bOn[id];
+			save = false;
+		}
+		case SM_ITEM_ENABLE:  set_pcvar_num(g_pEnable, get_pcvar_num(g_pEnable) ? 0 : 1);
+		case SM_ITEM_FOGMODE: set_pcvar_num(g_pFogMode, get_pcvar_num(g_pFogMode) ? 0 : 1);
+		case SM_ITEM_DUCK:    set_pcvar_num(g_pShowDuck, get_pcvar_num(g_pShowDuck) ? 0 : 1);
+		case SM_ITEM_KEEP:    set_pcvar_num(g_pKeep, get_pcvar_num(g_pKeep) ? 0 : 1);
+		case SM_ITEM_COLOR:
+		{
+			new ci = speed_color_index();
+			set_pcvar_string(g_pColor, g_szColorRGB[(ci + 1) % sizeof(g_szColorRGB)]);
+		}
+		case SM_ITEM_Y:
+		{
+			new Float:y = get_pcvar_float(g_pY);
+			new Float:next = g_fYSteps[0];
+			for (new i = 0; i < sizeof(g_fYSteps); i++)
+			{
+				if (g_fYSteps[i] > y + 0.001)
+				{
+					next = g_fYSteps[i];
+					break;
+				}
+			}
+			set_pcvar_float(g_pY, next);
+		}
+		case SM_ITEM_X:
+		{
+			new xi = speed_x_index();
+			set_pcvar_float(g_pX, g_fXSteps[(xi + 1) % sizeof(g_fXSteps)]);
+		}
+		case SM_ITEM_FOGMAX:
+		{
+			new cur = get_pcvar_num(g_pFogMax);
+			new next = g_iFogMaxSteps[0];
+			for (new i = 0; i < sizeof(g_iFogMaxSteps); i++)
+			{
+				if (g_iFogMaxSteps[i] > cur)
+				{
+					next = g_iFogMaxSteps[i];
+					break;
+				}
+			}
+			set_pcvar_num(g_pFogMax, next);
+		}
+		case SM_ITEM_DEBUG:   set_pcvar_num(g_pDebug, get_pcvar_num(g_pDebug) ? 0 : 1);
+		case SM_ITEM_FOGMENU:
+		{
+			client_cmd(id, "fogmenu");
+			return PLUGIN_HANDLED;
+		}
+	}
+	if (save)
+		speed_save_cfg();
+	speed_menu_show(id, page);
+	return PLUGIN_HANDLED;
+}
+
+speed_cfg_path(path[], len)
+{
+	get_configsdir(path, len);
+	add(path, len, "/speed_hud.cfg");
+}
+
+speed_save_cfg()
+{
+	new path[128], color[16];
+	speed_cfg_path(path, charsmax(path));
+	new f = fopen(path, "wt");
+	if (!f)
+		return;
+	get_pcvar_string(g_pColor, color, charsmax(color));
+	fprintf(f, "// speed_hud settings - written by /speedmenu, exec'd on map start. Delete to reset.^n");
+	fprintf(f, "speed_hud_enable %d^n", get_pcvar_num(g_pEnable));
+	fprintf(f, "speed_hud_fog_mode %d^n", get_pcvar_num(g_pFogMode));
+	fprintf(f, "speed_hud_duck %d^n", get_pcvar_num(g_pShowDuck));
+	fprintf(f, "speed_hud_keep %d^n", get_pcvar_num(g_pKeep));
+	fprintf(f, "speed_hud_color ^"%s^"^n", color);
+	fprintf(f, "speed_hud_x %.2f^n", get_pcvar_float(g_pX));
+	fprintf(f, "speed_hud_y %.2f^n", get_pcvar_float(g_pY));
+	fprintf(f, "speed_hud_fog_max %d^n", get_pcvar_num(g_pFogMax));
+	fprintf(f, "speed_hud_hold %.2f^n", get_pcvar_float(g_pHold));
+	fprintf(f, "speed_hud_debug %d^n", get_pcvar_num(g_pDebug));
+	fclose(f);
 }
 
 public client_putinserver(id)
