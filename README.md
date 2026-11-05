@@ -89,3 +89,7 @@ Technical details are in [docs/TECHNICAL.md](docs/TECHNICAL.md).
 ## Credits
 
 * The speed HUD layout follows the speed panel of [gcljs](https://codeberg.org/GameChaos/gcljs) by GameChaos.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
