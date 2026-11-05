@@ -109,7 +109,9 @@ See [docs/TECHNICAL.md](docs/TECHNICAL.md) for details, assumptions and limitati
 - Expect a small client-prediction snap on delayed, emulated and rewritten jumps.
 - On a backward rewrite, takeoff timing and position are unchanged. Only the velocity is replaced.
 - Emulated takeoffs play no jump sound.
-- Left untouched: duck transitions, water, ladders, moving or sinking ground, conveyors, FOG >= 4, and ledge drops.
+- Left untouched: duck transitions, water, ladders, trains and conveyors, FOG >= 4, and ledge drops.
+- Sinking bhop blocks (moving func_door) are supported: the engine carries you with the block (SV_PushMove) without touching your velocity.
+- Offset and small blocks: a jump is only delayed to a frame where you will still have ground under you, using the engine's own on-ground test at the predicted position. Otherwise the plugin picks the best reachable frame. A `-1.000` candidate in `FOGE` means "no ground there".
 
 ## Verifying against the engine
 

@@ -185,7 +185,7 @@ Run `python tools/fog_reference.py sweep` for the full table, or `sanity` for th
   - The plugin never emulates a takeoff on an unducking frame. Presetting airborne velocity there would skip PM_UnDuck's +18 raise.
   - **Untouched:** a duck in transition (bInDuck), pressing duck while standing, and an unduck with no room.
 - Also not handled (passed through untouched): water, waterjump, ladders, noclip, conveyors and
-  moving ground (including sinking bhop blocks), nonzero basevelocity, frozen or on-train players,
+  trains (func_train / func_tracktrain / func_vehicle), nonzero basevelocity, frozen or on-train players,
   dead players, observers, bots. Also FOG >= 4 jumps and ledge drops.
   - A skipped press shows as `mode=untouched(<reason>)` in `FOGJ`.
   - Every `FOGF` line carries `ds=` (0 stand, 1 unduck, 2 ducked), `dm=` (move multiplier) and `why=`.

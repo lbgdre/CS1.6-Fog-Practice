@@ -520,7 +520,8 @@ def check_candidates(s, mv, stats, bad, args):
                 bad.append(f"id={ev['id']} eval f{c}: candidate FOG{m} plugin {cand[m - 1]:.3f} python {xy:.3f}")
             if m in prev_pred:
                 stats["pred"].append(abs(prev_pred[m] - xy))
-        prev_pred = {m: cand[m - 1] for m in range(c + 1, len(cand) + 1) if cand[m - 1] != 0.0}
+        # -1 = the plugin predicted no ground at that frame (FOG impossible); 0 = not computed
+        prev_pred = {m: cand[m - 1] for m in range(c + 1, len(cand) + 1) if cand[m - 1] > 0.0}
 
 
 def main():

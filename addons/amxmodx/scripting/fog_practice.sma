@@ -703,14 +703,29 @@ fog_evaluate(id, c, fogmax, buttons, oldb)
 		// first simulated frame is frame c itself (if stripped), with its own duck state;
 		// after an unduck the player is standing; a held duck stays ducked
 		new ds = r_ds[id][c];
+		new bool:lost = false;
 		for (m = c + 1; m <= fogmax; m++)
 		{
+			if (lost)
+			{
+				cand[m] = -1.0;
+				continue;
+			}
 			fog_ground_step(id, v, org, fu, pun, r_msec[id][c], r_fm[id][c], r_sm[id][c], r_um[id][c],
 				r_ang[id][c], r_maxspd[id][c], r_pfric[id][c],
 				(ds == DS_STAND) ? 1.0 : DUCK_MULT, ds == DS_DUCKED);
-			cand[m] = fog_takeoff(v, r_msec[id][c], r_grav[id][c], r_maxspd[id][c], tmp);
 			if (ds == DS_UNDUCK)
 				ds = DS_STAND;
+			// [PM] PM_CategorizePosition at the start of frame m: still on ground at the predicted
+			// origin? (small / offset bhop blocks: the extra ground frame can carry you over the
+			// edge, and a delayed jump would then be lost). If not, FOG m and later are impossible.
+			if (!fog_ground_below(id, org, ds == DS_DUCKED))
+			{
+				lost = true;
+				cand[m] = -1.0;
+				continue;
+			}
+			cand[m] = fog_takeoff(v, r_msec[id][c], r_grav[id][c], r_maxspd[id][c], tmp);
 		}
 	}
 
@@ -944,16 +959,19 @@ fog_eligible(id, flags, buttons, &ds, bool:ignoreDuck = false)
 	pev(id, pev_basevelocity, bv);          // conveyors / pushes: skip
 	if (bv[0] != 0.0 || bv[1] != 0.0 || bv[2] != 0.0)
 		return WHY_BASEVEL;
-	// [GD] CBasePlayer::Jump adds conveyor / train velocity. Any moving ground is also treated as
-	// unsafe (precaution): ground that moves away between usercmds could leave the player with no
-	// ground at the start of the next PM_PlayerMove, so a stripped jump could be lost.
+	// [GD] CBasePlayer::Jump adds the ground's velocity only for FL_CONVEYOR ground (basevelocity)
+	// and for func_train / func_tracktrain / func_vehicle. Other moving brushes, e.g. sinking bhop
+	// blocks (func_door), are fine: [SV] SV_PushMove (sv_phys.cpp) carries a player standing on the
+	// pusher (groundentity == pusher) with it and keeps FL_ONGROUND for MOVETYPE_WALK; it moves the
+	// origin, not the velocity, so none of the FOG math changes.
 	new ground = pev(id, pev_groundentity);
 	if (ground > 0 && pev_valid(ground))
 	{
 		if (pev(ground, pev_flags) & FL_CONVEYOR)
 			return WHY_CONVEYOR;
-		pev(ground, pev_velocity, bv);
-		if (bv[0] != 0.0 || bv[1] != 0.0 || bv[2] != 0.0)
+		new cls[32];
+		pev(ground, pev_classname, cls, charsmax(cls));
+		if (equal(cls, "func_train") || equal(cls, "func_tracktrain") || equal(cls, "func_vehicle"))
 			return WHY_MOVING_GROUND;
 	}
 	if (fog_effective_maxspeed(id) <= 0.0)
@@ -1117,6 +1135,22 @@ bool:fog_edge_trace(id, const Float:org[3], const Float:v[3], bool:ducked)
 	new Float:frac;
 	get_tr2(g_tr, TR_flFraction, frac);
 	return (frac == 1.0);
+}
+
+// [PM] PM_CategorizePosition: trace the player hull 2 units down; on ground iff the hit plane's
+// normal z >= 0.7 (no hit -> normal 0 -> airborne). allsolid counts as no ground (be safe: a
+// FOG we are not sure we can reach is never chosen).
+bool:fog_ground_below(id, const Float:org[3], bool:ducked)
+{
+	new Float:end[3], Float:normal[3];
+	end[0] = org[0];
+	end[1] = org[1];
+	end[2] = org[2] - 2.0;
+	engfunc(EngFunc_TraceHull, org, end, IGNORE_MONSTERS, ducked ? HULL_HEAD : HULL_HUMAN, id, g_tr);
+	if (get_tr2(g_tr, TR_AllSolid))
+		return false;
+	get_tr2(g_tr, TR_vecPlaneNormal, normal);
+	return (normal[2] >= 0.7);
 }
 
 // One predicted ground frame (no jump): updates v, org, fu, pun in place.
