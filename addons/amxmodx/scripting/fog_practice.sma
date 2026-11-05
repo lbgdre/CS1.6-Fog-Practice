@@ -88,7 +88,7 @@
 
 #define MAXP            33
 #define MAX_FOG         3
-#define REC             5       // ground frames 1..4 are recorded (index 0 unused)
+#define REC             7       // ground frames 1..6 are recorded (index 0 unused)
 
 // ---- constants from [PM] ----
 #define STAMINA_ON_JUMP     1315.789429     // PM_Jump: pmove->fuser2 = 1315.789429
@@ -130,14 +130,15 @@ enum
 	ACT_GROUND,     // ordinary ground frame, plugin did nothing
 	ACT_NATURAL,    // a real PM_Jump happens this frame (plugin may have cleared oldbuttons)
 	ACT_EMULATE,    // takeoff produced by velocity preset (delayed inject / backward rewrite)
-	ACT_STRIP       // PM_Jump suppressed with oldbuttons |= IN_JUMP
+	ACT_STRIP,      // PM_Jump suppressed with oldbuttons |= IN_JUMP
+	ACT_DD          // double-duck lift frame (PM_UnDuck with bInDuck on ground: +18, airborne)
 };
-new const g_szAct[][] = { "none", "ground", "jump", "emul", "strip" };
+new const g_szAct[][] = { "none", "ground", "jump", "emul", "strip", "dd" };
 
 new const g_szLogFile[] = "fog_debug.log";   // -> addons/amxmodx/logs/fog_debug.log
 
 // ---- cvars ----
-new g_pEnable, g_pMax, g_pFixVz, g_pDebug;
+new g_pEnable, g_pMax, g_pFixVz, g_pDebug, g_pDD, g_pDDMax;
 new g_pFriction, g_pStopSpeed, g_pEdgeFriction, g_pAccelerate, g_pAirAccelerate;
 new g_pGravity, g_pMaxSpeed, g_pRollAngle, g_pRollSpeed;
 
@@ -165,6 +166,11 @@ new bool:g_bEvaluated[MAXP];
 new g_iPressFrame[MAXP];
 new g_iSource[MAXP];            // frame whose velocity was used for an emulated takeoff
 new g_iWhyPress[MAXP];          // why the press frame was left untouched (WHY_*)
+new g_iDDFirst[MAXP];           // first ground frame of this contact that starts standing (earliest DD press)
+new g_iDDPress[MAXP];           // ground frame where the current DD duck press happened
+new bool:g_bDDApplied[MAXP];
+new Float:g_fDDPre[MAXP], Float:g_fDDCorr[MAXP];
+new g_iDDWhy[MAXP][32];
 new g_iPlanSrc[MAXP];           // source frame of the takeoff planned for this usercmd (for fog_api_src)
 new Float:g_fPlanTime[MAXP];    // gpGlobals->time of that usercmd (svtimebase, same in PreThink and CmdEnd)
 new Float:g_fLand[MAXP];
@@ -202,6 +208,8 @@ public plugin_init()
 	g_pMax    = create_cvar("fog_max", "3", FCVAR_NONE, "Highest FOG considered (1-3)", true, 1.0, true, 3.0);
 	g_pFixVz  = create_cvar("fog_fix_vz", "1", FCVAR_NONE, "Backward rewrite also uses the earlier frame's jump vz", true, 0.0, true, 1.0);
 	g_pDebug  = create_cvar("fog_debug", "0", FCVAR_NONE, "0 off, 1 summary to console + full log, 2 full to console too", true, 0.0, true, 2.0);
+	g_pDD     = create_cvar("fog_dd", "1", FCVAR_NONE, "Double duck: give the speed of a DD pressed on the first possible frame", true, 0.0, true, 1.0);
+	g_pDDMax  = create_cvar("fog_dd_max", "3", FCVAR_NONE, "Correct a DD pressed on the first N possible frames (1-3)", true, 1.0, true, 3.0);
 
 	// movevars sources (engine cvars; names as registered by the engine)
 	g_pFriction      = get_cvar_pointer("sv_friction");
@@ -292,7 +300,7 @@ public cmd_fog(id)
 // Changed cvars are saved to addons/amxmodx/configs/fog_practice.cfg and exec'd in plugin_cfg.
 enum
 {
-	FM_ITEM_ME = 1, FM_ITEM_ENABLE, FM_ITEM_MAX, FM_ITEM_FIXVZ, FM_ITEM_DEBUG
+	FM_ITEM_ME = 1, FM_ITEM_ENABLE, FM_ITEM_MAX, FM_ITEM_FIXVZ, FM_ITEM_DEBUG, FM_ITEM_DD
 };
 
 public cmd_fogmenu(id)
@@ -326,6 +334,10 @@ fog_menu_show(id)
 
 	formatex(item, charsmax(item), "Debug output: %s", get_pcvar_num(g_pDebug) ? "\yON" : "\rOFF");
 	num_to_str(FM_ITEM_DEBUG, info, charsmax(info));
+	menu_additem(menu, item, info, ADMIN_CVAR);
+
+	formatex(item, charsmax(item), "DD gets first frame: %s", get_pcvar_num(g_pDD) ? "\yON" : "\rOFF");
+	num_to_str(FM_ITEM_DD, info, charsmax(info));
 	menu_additem(menu, item, info, ADMIN_CVAR);
 
 	menu_setprop(menu, MPROP_EXIT, MEXIT_ALL);
@@ -363,6 +375,7 @@ public fog_menu_handler(id, menu, item)
 		case FM_ITEM_MAX:    set_pcvar_num(g_pMax, clamp(get_pcvar_num(g_pMax), 1, MAX_FOG) % MAX_FOG + 1);
 		case FM_ITEM_FIXVZ:  set_pcvar_num(g_pFixVz, get_pcvar_num(g_pFixVz) ? 0 : 1);
 		case FM_ITEM_DEBUG:  set_pcvar_num(g_pDebug, get_pcvar_num(g_pDebug) ? 0 : 1);   // 2 (full) via cvar only
+		case FM_ITEM_DD:     set_pcvar_num(g_pDD, get_pcvar_num(g_pDD) ? 0 : 1);
 	}
 	if (save)
 		fog_save_cfg();
@@ -388,6 +401,8 @@ fog_save_cfg()
 	fprintf(f, "fog_max %d^n", clamp(get_pcvar_num(g_pMax), 1, MAX_FOG));
 	fprintf(f, "fog_fix_vz %d^n", get_pcvar_num(g_pFixVz));
 	fprintf(f, "fog_debug %d^n", get_pcvar_num(g_pDebug));
+	fprintf(f, "fog_dd %d^n", get_pcvar_num(g_pDD));
+	fprintf(f, "fog_dd_max %d^n", clamp(get_pcvar_num(g_pDDMax), 1, 3));
 	fclose(f);
 }
 
@@ -543,6 +558,19 @@ public fw_PreThink_Post(id)
 		g_iAction[id] = press ? ACT_NATURAL : ACT_GROUND;
 	}
 
+	// ---- double duck (DD) ----
+	// [PM] PM_Duck: IN_DUCK newly pressed (vs oldbuttons) while !FL_DUCKING -> bInDuck = TRUE,
+	// the press frame stays a ground frame (friction, moves x0.333). Next usercmd without IN_DUCK
+	// while bInDuck -> PM_UnDuck (stock path, no bInDuck guard): on ground origin += 18 with the
+	// standing hull -> PM_CategorizePosition: airborne for that whole frame (the "lift").
+	new bInDuck = pev(id, pev_bInDuck);
+	if (!g_iDDFirst[id] && !(flags & FL_DUCKING) && !bInDuck)
+		g_iDDFirst[id] = c;
+	if ((buttons & IN_DUCK) && !(oldb & IN_DUCK) && !(flags & FL_DUCKING) && !bInDuck)
+		g_iDDPress[id] = c;
+	if (bInDuck && !(flags & FL_DUCKING) && !(buttons & IN_DUCK) && fog_unduck_room(id))
+		fog_dd_lift(id, c, flags, buttons, vel);
+
 	if (g_bRecThis[id])
 		r_act[id][c] = g_iAction[id];
 
@@ -605,6 +633,23 @@ public fw_CmdEnd_Post(id)
 		r_fuPost[id][c] = fu;
 		if (get_pcvar_num(g_pDebug))
 			fog_log_frame(id, c, air);
+	}
+
+	if (act == ACT_DD)
+	{
+		if (!air)
+			fog_warn(id, "expected a double-duck lift but the player stayed on ground");
+		if (get_pcvar_num(g_pDebug))
+		{
+			new line[256];
+			formatex(line, charsmax(line), "FOGD id=%d lift=%d press=%d first=%d pre=%.3f corr=%.3f applied=%d xy=%.3f vz=%.3f note=%s",
+				id, c, g_iDDPress[id], g_iDDFirst[id], g_fDDPre[id], g_fDDCorr[id], g_bDDApplied[id] ? 1 : 0,
+				fog_len2(vel), vel[2], g_iDDWhy[id]);
+			fog_out(id, get_pcvar_num(g_pDebug) >= 2, line);
+			if (is_user_connected(id))
+				console_print(id, "[FOG] DD press f%d (first f%d) lift f%d: %.2f -> %.2f %s",
+					g_iDDPress[id], g_iDDFirst[id], c, g_fDDPre[id], fog_len2(vel), g_bDDApplied[id] ? "(first-frame speed)" : g_iDDWhy[id]);
+		}
 	}
 
 	if (act == ACT_STRIP && air)
@@ -742,6 +787,78 @@ fog_evaluate(id, c, fogmax, buttons, oldb)
 	}
 }
 
+// DD lift on ground frame c (the duck press was on g_iDDPress). If the press was on the 2nd or 3rd
+// possible frame (fog_dd_max), preset the pre-move velocity to what a press on the FIRST possible
+// frame would have produced here: that frame's recorded state run through one ground frame with
+// the PM_Duck multiplier (= a press frame), fog_ground_step(..., DUCK_MULT). The engine then runs
+// the lift frame itself (PM_UnDuck +18, PM_AirMove with x0.333 moves). Lift timing and position
+// are unchanged, like a backward rewrite. DD has no PM_PreventMegaBunnyJumping cap, so the earliest
+// press is the fastest whenever ground friction outweighs ground acceleration ("not-better" else).
+fog_dd_lift(id, c, flags, buttons, const Float:vel[3])
+{
+	g_iAction[id] = ACT_DD;
+	g_bDDApplied[id] = false;
+	g_fDDPre[id] = fog_len2(vel);
+	g_fDDCorr[id] = 0.0;
+	copy(g_iDDWhy[id], charsmax(g_iDDWhy[]), "-");
+
+	if (!get_pcvar_num(g_pEnable) || !g_bOn[id] || !get_pcvar_num(g_pDD))
+	{
+		copy(g_iDDWhy[id], charsmax(g_iDDWhy[]), "off");
+		return;
+	}
+	new ds2;
+	new why = fog_eligible(id, flags, buttons, ds2, true);
+	if (why != WHY_OK)
+	{
+		copy(g_iDDWhy[id], charsmax(g_iDDWhy[]), g_szWhy[why]);
+		return;
+	}
+	new e = g_iDDFirst[id], k = g_iDDPress[id];
+	if (!e || !k || e >= REC)
+	{
+		copy(g_iDDWhy[id], charsmax(g_iDDWhy[]), "no-record");
+		return;
+	}
+	// DD FOG = lift frame c (usercmds started on ground, lift included). Best possible = e + 1
+	// (press on e, lift on e+1): 2 after a standing landing, 3 after a ducked one (gs / sgs).
+	if (c <= e + 1)
+	{
+		copy(g_iDDWhy[id], charsmax(g_iDDWhy[]), "already-first");
+		return;
+	}
+	if (c - (e + 1) >= clamp(get_pcvar_num(g_pDDMax), 1, 3))
+	{
+		copy(g_iDDWhy[id], charsmax(g_iDDWhy[]), "too-late");
+		return;
+	}
+	#pragma unused k
+
+	new Float:v[3], Float:org[3], Float:pun[3], Float:fu;
+	v = r_vPre[id][e];
+	org = r_orgEff[id][e];
+	pun = r_pun[id][e];
+	fu = r_fuPre[id][e];
+	fog_ground_step(id, v, org, fu, pun, r_msec[id][e], r_fm[id][e], r_sm[id][e], r_um[id][e],
+		r_ang[id][e], r_maxspd[id][e], r_pfric[id][e], DUCK_MULT, false);
+	g_fDDCorr[id] = fog_len2(v);
+
+	if (g_fDDCorr[id] <= g_fDDPre[id] + CHOICE_EPS)
+	{
+		copy(g_iDDWhy[id], charsmax(g_iDDWhy[]), "not-better");
+		return;
+	}
+	v[2] = vel[2];
+	set_pev(id, pev_velocity, v);
+	g_bDDApplied[id] = true;
+	if (c < REC)
+	{
+		r_vSet[id][c][0] = v[0];
+		r_vSet[id][c][1] = v[1];
+		r_vSet[id][c][2] = v[2];
+	}
+}
+
 // Takeoff at frame c using the (capped) velocity of frame b. Preset so the engine runs the jump
 // frame's remainder (see header). Returns false if the preset would not make the player airborne.
 bool:fog_emulate(id, c, b)
@@ -775,16 +892,20 @@ bool:fog_emulate(id, c, b)
 }
 
 // Returns WHY_OK if the plugin may act on this ground frame; sets ds to the PM_Duck state.
-fog_eligible(id, flags, buttons, &ds)
+fog_eligible(id, flags, buttons, &ds, bool:ignoreDuck = false)
 {
 	ds = DS_STAND;
 	// FL_FROZEN / FL_ONTRAIN: PM_CheckParameters zeroes the moves
 	if (flags & (FL_FROZEN | FL_ONTRAIN))
 		return WHY_FROZEN;
 	// [PM] PM_Duck / PM_UnDuck / PM_Jump (bInDuck && FL_DUCKING -> no jump)
-	if (pev(id, pev_bInDuck))
+	if (ignoreDuck)
+	{
+		// double-duck path: the caller handles the duck state
+	}
+	else if (pev(id, pev_bInDuck))
 		return WHY_DUCK_TRANS;
-	if (flags & FL_DUCKING)
+	else if (flags & FL_DUCKING)
 	{
 		if (buttons & IN_DUCK)
 			ds = DS_DUCKED;
@@ -813,10 +934,9 @@ fog_eligible(id, flags, buttons, &ds)
 	pev(id, pev_basevelocity, bv);          // conveyors / pushes: skip
 	if (bv[0] != 0.0 || bv[1] != 0.0 || bv[2] != 0.0)
 		return WHY_BASEVEL;
-	// [GD] CBasePlayer::Jump adds conveyor / train velocity. Any moving ground is also unsafe for a
-	// delay: a sinking bhop block (func_door) can leave the player with no ground at the start of
-	// the next PM_PlayerMove (PM_CategorizePosition), so a stripped jump would be lost. Logs show
-	// such frames: FL_ONGROUND at PreThink, yet PM ran a full air frame (no friction, vz -8).
+	// [GD] CBasePlayer::Jump adds conveyor / train velocity. Any moving ground is also treated as
+	// unsafe (precaution): ground that moves away between usercmds could leave the player with no
+	// ground at the start of the next PM_PlayerMove, so a stripped jump could be lost.
 	new ground = pev(id, pev_groundentity);
 	if (ground > 0 && pev_valid(ground))
 	{
@@ -891,7 +1011,8 @@ fog_record_pre(id, c, const Float:vel[3], ds, why)
 	r_orgEff[id][c][2] = r_org[id][c][2] + ((ds == DS_UNDUCK) ? UNDUCK_RAISE : 0.0);
 	r_ds[id][c] = ds;
 	r_why[id][c] = why;
-	r_mult[id][c] = (ds == DS_STAND) ? 1.0 : DUCK_MULT;
+	// [PM] PM_Duck scales the moves when IN_DUCK || bInDuck || FL_DUCKING (also on ineligible frames)
+	r_mult[id][c] = ((g_cmdButtons[id] & IN_DUCK) || pev(id, pev_bInDuck) || (pev(id, pev_flags) & FL_DUCKING)) ? DUCK_MULT : 1.0;
 	pev(id, pev_punchangle, r_pun[id][c]);
 	r_ang[id][c][0] = g_cmdAng[id][0];
 	r_ang[id][c][1] = g_cmdAng[id][1];
@@ -931,6 +1052,12 @@ fog_reset(id)
 	g_iPressFrame[id] = 0;
 	g_iSource[id] = 0;
 	g_iWhyPress[id] = WHY_OK;
+	g_iDDFirst[id] = 0;
+	g_iDDPress[id] = 0;
+	g_bDDApplied[id] = false;
+	g_fDDPre[id] = 0.0;
+	g_fDDCorr[id] = 0.0;
+	g_iDDWhy[id][0] = 0;
 	g_fLand[id] = 0.0;
 	g_szDec[id][0] = 0;
 	for (new m = 0; m <= MAX_FOG; m++)

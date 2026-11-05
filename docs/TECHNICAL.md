@@ -59,8 +59,25 @@ current speed, then `(takeoff speed)` and `FOG: n` while airborne. Spectators wa
 | `fog_max` | 3 | highest FOG considered, clamped to 1-3 (1 = plugin does nothing useful) |
 | `fog_fix_vz` | 1 | on a backward rewrite, also use the earlier frame's jump vz (from that frame's fuser2) |
 | `fog_debug` | 0 | 1 = one summary line per jump to console + full detail to the log; 2 = full detail to console too |
+| `fog_dd` | 1 | double duck: give the speed of a DD pressed on the first possible frame |
+| `fog_dd_max` | 3 | correct DDs within the first N possible DD FOGs (1-3) |
 | `say /fog` | | toggle the correction for yourself |
 | `say /fogmenu` | | settings menu (saved to `configs/fog_practice.cfg`); speed_hud has `/speedmenu` (saved to `configs/speed_hud.cfg`) |
+
+### Double duck (DD, CJ / DCJ / MCJ / standup variants)
+
+A ground scroll duck (DD) takes two usercmds:
+- **Press frame:** a ground frame, with friction and the 0.333 duck move scale.
+- **Lift frame:** with duck released while the duck is still in transition (`bInDuck`), PM_UnDuck raises you 18 units. You are airborne for that whole frame.
+
+DD has no 300 cap, so the earliest DD is the fastest. That's the minimum "DD FOG":
+- 2 after a standing landing (gs)
+- 3 after a ducked landing, because the first frame is spent standing up (sgs / standup variants)
+
+With `fog_dd 1`, a DD whose lift lands within the first `fog_dd_max` (default 3) possible DD FOGs gets the speed of a DD pressed on the first possible frame. On the lift frame, before movement runs, the plugin replaces your velocity with your recorded first-frame state run through one press frame (friction plus x0.333 accel). The engine then runs the lift itself.
+- Lift timing and position are unchanged, like a bhop rewrite.
+- The final jump of a CJ / MCJ is a normal bhop and gets the normal best-of-FOG treatment.
+- Debug lines: `FOGD` (lift frame, press frame, first possible frame, before/after speed, and a note: `already-first`, `too-late`, `not-better`, or a skip reason).
 
 ## What the source says (and why the design differs from "set_uc in CmdStart")
 

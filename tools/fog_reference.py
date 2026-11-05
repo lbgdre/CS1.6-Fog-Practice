@@ -229,6 +229,28 @@ def emulated_frame(vset, inp, mv):
     return v, STAMINA_ON_JUMP                       # plugin writes fuser2 in CmdEnd
 
 
+def dd_lift_frame(vstart, fu_pre, inp, mv):
+    """Double-duck lift frame: PM_Duck -> PM_UnDuck (+18 with bInDuck) makes the player airborne
+    before movement, so: no friction, PM_AirMove with the duck-scaled moves (inp.dm = 0.333),
+    gravity halves before and after. fuser2 only decays (no PM_Jump)."""
+    dt = inp.msec * 0.001
+    g = inp.entgrav * mv.gravity * 0.5 * dt
+    wishdir, wishspeed, _ = wish(inp, vstart, mv)
+    fu = reduce_fuser2(fu_pre, inp.msec)
+    v = [vstart[0], vstart[1], F(vstart[2] - g)]
+    v = air_accelerate(v, wishdir, wishspeed, mv.airaccelerate, dt, inp.pfric)
+    v[2] = F(v[2] - g)
+    return v, fu
+
+
+def dd_first_frame_speed(vpre_e, fu_e, inp_e, mv):
+    """Speed at the lift if the duck had been pressed on frame e (the first possible frame):
+    frame e run as a press frame (ground frame, moves x0.333)."""
+    pinp = Inputs(**{**inp_e.__dict__, "dm": 0.333})
+    v, _ = ground_frame(vpre_e, fu_e, pinp, mv)
+    return v
+
+
 def candidates(vpre1, fu1, inp, mv, fog_max=3):
     """From the state at ground frame 1, takeoff xy for FOG 1..fog_max (inputs repeated)."""
     out = []
@@ -350,7 +372,7 @@ def inputs_from(fr):
 
 def cmd_check(args):
     mv = Movevars()
-    stats = {"ground": [], "strip": [], "jump": [], "emul": [], "cont": [], "cand": [], "pred": []}
+    stats = {"ground": [], "strip": [], "jump": [], "emul": [], "dd": [], "ddcorr": [], "cont": [], "cand": [], "pred": []}
     bad = []
     seq = {}            # id -> {"frames": {f: rec}, "evals": [..]}
     hud, fogj = {}, {}  # speed_hud SPDJ lines / fog_practice FOGJ lines, per player
@@ -390,6 +412,18 @@ def cmd_check(args):
                 if args.verbose:
                     print(raw.rstrip())
                 seq.pop(d["id"], None)
+            elif "FOGD " in raw:
+                d = parse(raw.split("FOGD ", 1)[1])
+                s_ = seq.get(d["id"])
+                fe = s_["frames"].get(d["first"]) if s_ else None
+                if d.get("applied") == 1 and fe:
+                    v = dd_first_frame_speed(fe["vpre"], fe["fu"], inputs_from(fe), mv)
+                    err = abs(math.hypot(v[0], v[1]) - d["corr"])
+                    stats["ddcorr"].append(err)
+                    if err > args.tol:
+                        bad.append(f"id={d['id']} DD lift f{d['lift']}: plugin first-frame speed {d['corr']:.3f} python {math.hypot(v[0], v[1]):.3f}")
+                if args.verbose:
+                    print(raw.rstrip())
             elif "SPDJ " in raw:
                 d = parse(raw.split("SPDJ ", 1)[1])
                 hud.setdefault(d["id"], []).append(d)
@@ -414,12 +448,13 @@ def cmd_check(args):
                 bad.append(f"speed_hud id={pid} xy={h['xy']}: HUD fog={h['fog']} src={h['src']} | "
                            f"fog_practice fog={j['fog']} src={j['src']}")
         print(f"  speed_hud takeoffs n={len(hs)}  matching fog_practice FOG/src: {ok}")
-    for k in ("ground", "strip", "jump", "emul", "cont", "cand", "pred"):
+    for k in ("ground", "strip", "jump", "emul", "dd", "ddcorr", "cont", "cand", "pred"):
         xs = stats[k]
         if xs:
             print(f"  {k:7s} n={len(xs):5d}  max|err|={max(xs):.5f}  mean={sum(xs) / len(xs):.5f}")
     label = {"ground": "ground frame vs engine", "strip": "stripped frame vs engine",
              "jump": "natural jump frame vs engine", "emul": "emulated takeoff vs engine",
+             "dd": "double-duck lift frame vs engine", "ddcorr": "plugin DD first-frame speed vs python",
              "cont": "post->next pre continuity", "cand": "plugin candidates vs python (exact frames)",
              "pred": "plugin prediction vs what later happened"}
     print("  (" + "; ".join(f"{k}: {v}" for k, v in label.items()) + ")")
@@ -446,6 +481,10 @@ def check_frame(fr, mv, stats, bad, args):
     elif act == "emul":
         exp, fu = emulated_frame(fr["vset"], inp, mv)
         key = "emul"
+    elif act == "dd":
+        start = fr["vset"] if any(abs(x) > 0 for x in fr["vset"]) else fr["vpre"]
+        exp, fu = dd_lift_frame(start, fr["fu"], inp, mv)
+        key = "dd"
     else:
         return
     if act in ("ground", "strip") and fr.get("air", 0):
