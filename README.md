@@ -5,6 +5,10 @@ Two AMX Mod X plugins for **Counter-Strike 1.6** bhop practice on a local listen
 - **fog_practice**: every scroll-wheel bhop and double duck gets the speed of the best FOG (frames on ground), so you can practice your strafes without FOG luck.
 - **speed_hud**: a speedometer showing your speed, takeoff speed, FOG and air-duck frames.
 
+> [!NOTE]
+> This is **not a KZ (map-running) plugin**. It has no timer, checkpoints, demo recording, records or map tools.
+> To run maps with a timer, save checkpoints or record demos, install a separate KZ plugin (for example the KZ-Rush pack) and use these two plugins alongside it.
+
 > [!WARNING]
 > **fog_practice is NOT legit for records.**
 > It changes movement physics. Any run, time, jumpstat or demo made with it enabled is **not legit**.
