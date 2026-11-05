@@ -61,6 +61,7 @@ Two AMX Mod X plugins for **Counter-Strike 1.6** bhop practice on a local listen
 | FOG shows | the frame your speed came from, or the frame you left the ground on |
 | Duck in air | show the `D:` line |
 | Color | white, green, yellow, cyan, orange, red, pink |
+| Font size | big or small (the game has only these two text sizes; both update 100 times a second) |
 | Height | 0.55 to 0.85 |
 | Horizontal | center, left, right |
 | Show FOG up to | 3, 5, 8, 10 |

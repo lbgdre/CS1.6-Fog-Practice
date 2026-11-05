@@ -126,7 +126,7 @@ public plugin_cfg()
 enum
 {
 	SM_ITEM_ENABLE = 1, SM_ITEM_FOGMODE, SM_ITEM_DUCK, SM_ITEM_COLOR, SM_ITEM_Y, SM_ITEM_X,
-	SM_ITEM_FOGMAX, SM_ITEM_DEBUG
+	SM_ITEM_FOGMAX, SM_ITEM_DEBUG, SM_ITEM_SIZE
 };
 
 new const g_szColorName[][] = { "white", "green", "yellow", "cyan", "orange", "red", "pink" };
@@ -188,6 +188,11 @@ speed_menu_show(id, page)
 	num_to_str(SM_ITEM_COLOR, info, charsmax(info));
 	menu_additem(menu, item, info, ADMIN_CVAR);
 
+	// GoldSrc has exactly two text sizes: director HUD (big) and classic HUD (small); both 100 Hz
+	formatex(item, charsmax(item), "Font size: \y%s", get_pcvar_num(g_pStyle) ? "small" : "big");
+	num_to_str(SM_ITEM_SIZE, info, charsmax(info));
+	menu_additem(menu, item, info, ADMIN_CVAR);
+
 	new ynum[16];
 	speed_fmt3(get_pcvar_float(g_pY), ynum, charsmax(ynum));
 	ynum[4] = 0;    // "0.700" -> "0.70"
@@ -237,6 +242,7 @@ public speed_menu_handler(id, menu, item)
 		case SM_ITEM_ENABLE:  set_pcvar_num(g_pEnable, get_pcvar_num(g_pEnable) ? 0 : 1);
 		case SM_ITEM_FOGMODE: set_pcvar_num(g_pFogMode, get_pcvar_num(g_pFogMode) ? 0 : 1);
 		case SM_ITEM_DUCK:    set_pcvar_num(g_pShowDuck, get_pcvar_num(g_pShowDuck) ? 0 : 1);
+		case SM_ITEM_SIZE:    set_pcvar_num(g_pStyle, get_pcvar_num(g_pStyle) ? 0 : 1);
 		case SM_ITEM_COLOR:
 		{
 			new ci = speed_color_index();
