@@ -67,8 +67,8 @@ To rebuild from source, run `amxxpc fog_practice.sma` and `amxxpc speed_hud.sma`
 
 ### Menus
 
-Each plugin has its own menu, and each menu has a shortcut to the other one.
-- **`/fogmenu`** (fog_practice): correction for me, plugin on/off for everyone, best of FOG 1 to N, rewrite jump height, debug output, show the records reminder.
+Each plugin has its own menu.
+- **`/fogmenu`** (fog_practice): plugin for me, plugin for everyone, best of FOG 1 to N, rewrite uses earlier jump height, debug output on/off.
 - **`/speedmenu`** (speed_hud): my HUD, HUD for everyone, what FOG shows, the DUCK line, keep takeoff after landing, color, height, horizontal position, show FOG up to, debug log.
 
 "For me" items work for everyone. Server-wide items need cvar access (flag `g`). On a listen server the host has it.

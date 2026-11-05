@@ -306,7 +306,7 @@ public cmd_fog(id)
 // Changed cvars are saved to addons/amxmodx/configs/fog_practice.cfg and exec'd in plugin_cfg.
 enum
 {
-	FM_ITEM_ME = 1, FM_ITEM_ENABLE, FM_ITEM_MAX, FM_ITEM_FIXVZ, FM_ITEM_DEBUG, FM_ITEM_NOTICE, FM_ITEM_SPEEDMENU
+	FM_ITEM_ME = 1, FM_ITEM_ENABLE, FM_ITEM_MAX, FM_ITEM_FIXVZ, FM_ITEM_DEBUG
 };
 
 public cmd_fogmenu(id)
@@ -317,13 +317,12 @@ public cmd_fogmenu(id)
 
 fog_menu_show(id)
 {
-	new title[128];
-	formatex(title, charsmax(title), "\yFOG Practice \dv%s^n\rPractice only - NOT legit for records", PLUGIN_VERSION);
+	new title[64];
+	formatex(title, charsmax(title), "\yFOG Practice \dv%s", PLUGIN_VERSION);
 	new menu = menu_create(title, "fog_menu_handler");
 	new item[96], info[4];
-	new const debugNames[][] = { "off", "summary + log", "full" };
 
-	formatex(item, charsmax(item), "Correction for me: %s", g_bOn[id] ? "\yON" : "\rOFF");
+	formatex(item, charsmax(item), "Plugin for me: %s", g_bOn[id] ? "\yON" : "\rOFF");
 	num_to_str(FM_ITEM_ME, info, charsmax(info));
 	menu_additem(menu, item, info);
 
@@ -339,15 +338,9 @@ fog_menu_show(id)
 	num_to_str(FM_ITEM_FIXVZ, info, charsmax(info));
 	menu_additem(menu, item, info, ADMIN_CVAR);
 
-	formatex(item, charsmax(item), "Debug output: \y%s", debugNames[clamp(get_pcvar_num(g_pDebug), 0, 2)]);
+	formatex(item, charsmax(item), "Debug output: %s", get_pcvar_num(g_pDebug) ? "\yON" : "\rOFF");
 	num_to_str(FM_ITEM_DEBUG, info, charsmax(info));
 	menu_additem(menu, item, info, ADMIN_CVAR);
-
-	num_to_str(FM_ITEM_NOTICE, info, charsmax(info));
-	menu_additem(menu, "Show the records reminder", info);
-
-	num_to_str(FM_ITEM_SPEEDMENU, info, charsmax(info));
-	menu_additem(menu, "Open speed HUD menu \d(/speedmenu)", info);
 
 	menu_setprop(menu, MPROP_EXIT, MEXIT_ALL);
 	menu_display(id, menu, 0);
@@ -383,17 +376,7 @@ public fog_menu_handler(id, menu, item)
 		case FM_ITEM_ENABLE: set_pcvar_num(g_pEnable, get_pcvar_num(g_pEnable) ? 0 : 1);
 		case FM_ITEM_MAX:    set_pcvar_num(g_pMax, clamp(get_pcvar_num(g_pMax), 1, MAX_FOG) % MAX_FOG + 1);
 		case FM_ITEM_FIXVZ:  set_pcvar_num(g_pFixVz, get_pcvar_num(g_pFixVz) ? 0 : 1);
-		case FM_ITEM_DEBUG:  set_pcvar_num(g_pDebug, (clamp(get_pcvar_num(g_pDebug), 0, 2) + 1) % 3);
-		case FM_ITEM_NOTICE:
-		{
-			task_notice(TASK_NOTICE + id);
-			save = false;
-		}
-		case FM_ITEM_SPEEDMENU:
-		{
-			client_cmd(id, "speedmenu");
-			return PLUGIN_HANDLED;
-		}
+		case FM_ITEM_DEBUG:  set_pcvar_num(g_pDebug, get_pcvar_num(g_pDebug) ? 0 : 1);   // 2 (full) via cvar only
 	}
 	if (save)
 		fog_save_cfg();
