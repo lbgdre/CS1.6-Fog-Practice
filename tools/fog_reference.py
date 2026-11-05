@@ -431,6 +431,11 @@ def cmd_check(args):
                 print("WARN:", raw.rstrip())
             if "FOGJ " in raw:
                 fogj.setdefault(parse(raw.split("FOGJ ", 1)[1])["id"], []).append(parse(raw.split("FOGJ ", 1)[1]))
+            if "FOGD " in raw:
+                d_ = parse(raw.split("FOGD ", 1)[1])
+                # a DD lift as fog_practice saw it, in FOGJ terms: fog = lift frame, src = speed source
+                fogj.setdefault(d_["id"], []).append({"xy": d_["xy"], "vz": d_["vz"], "fog": d_["lift"],
+                                                      "src": d_["first"] + 1 if d_.get("applied") == 1 else d_["lift"]})
 
     print(f"jumps logged: {njumps}")
     for pid, hs in hud.items():

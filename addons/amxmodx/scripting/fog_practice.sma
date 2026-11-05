@@ -797,6 +797,9 @@ fog_evaluate(id, c, fogmax, buttons, oldb)
 fog_dd_lift(id, c, flags, buttons, const Float:vel[3])
 {
 	g_iAction[id] = ACT_DD;
+	// fog_api_src: the DD FOG whose speed this lift gets (c unless corrected below)
+	g_iPlanSrc[id] = c;
+	g_fPlanTime[id] = get_gametime();
 	g_bDDApplied[id] = false;
 	g_fDDPre[id] = fog_len2(vel);
 	g_fDDCorr[id] = 0.0;
@@ -851,6 +854,7 @@ fog_dd_lift(id, c, flags, buttons, const Float:vel[3])
 	v[2] = vel[2];
 	set_pev(id, pev_velocity, v);
 	g_bDDApplied[id] = true;
+	g_iPlanSrc[id] = e + 1;     // speed of the best DD: press on e, lift on e + 1
 	if (c < REC)
 	{
 		r_vSet[id][c][0] = v[0];

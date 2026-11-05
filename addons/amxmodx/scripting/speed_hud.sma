@@ -75,6 +75,8 @@ new Float:g_fNextHud[MAXP];
 
 new g_iDuckRun[MAXP];           // current/last continuous ducked run in this air phase
 new bool:g_bPrevAirDuck[MAXP];  // previous air usercmd had IN_DUCK
+new bool:g_bPreInDuck[MAXP];    // pev->bInDuck at FM_CmdStart (duck in transition)
+new bool:g_bTakeoffDD[MAXP];    // the shown takeoff is a double-duck lift
 new g_iLandDuck[MAXP];          // g_iDuckRun at the last landing; -1 = no landing to report
 new g_iTakeoffDuck[MAXP];       // value shown for the current jump; -1 = none
 
@@ -350,6 +352,8 @@ speed_reset(id)
 	g_bPrevAirDuck[id] = false;
 	g_iLandDuck[id] = -1;
 	g_iTakeoffDuck[id] = -1;
+	g_bPreInDuck[id] = false;
+	g_bTakeoffDD[id] = false;
 }
 
 public cmd_toggle(id)
@@ -374,6 +378,7 @@ public fw_CmdStart(id, uc_handle)
 	g_iButtons[id] = get_uc(uc_handle, UC_Buttons);
 	g_iPreFlags[id] = pev(id, pev_flags);
 	g_iPreMovetype[id] = pev(id, pev_movetype);
+	g_bPreInDuck[id] = pev(id, pev_bInDuck) != 0;
 	return FMRES_IGNORED;
 }
 
@@ -397,9 +402,15 @@ public fw_CmdEnd_Post(id)
 		if (g_iMsec[id] > 0 && g_iGround[id] < 100000)
 			g_iGround[id]++;
 
-		if (!postGround && postMovetype == MOVETYPE_WALK && vel[2] > 0.0)
+		// double-duck lift (pm_shared.cpp PM_Duck -> PM_UnDuck, stock path): the duck press left
+		// bInDuck set without FL_DUCKING, and this usercmd releases duck on ground -> origin +18,
+		// airborne for the whole frame. It ends with vz < 0 (gravity), so it is not a "vz > 0" jump.
+		new bool:ddLift = g_bPreInDuck[id] && !(g_iPreFlags[id] & FL_DUCKING) && !(g_iButtons[id] & IN_DUCK);
+
+		if (!postGround && postMovetype == MOVETYPE_WALK && (vel[2] > 0.0 || ddLift))
 		{
-			// takeoff (PM_Jump or an emulated takeoff)
+			// takeoff: PM_Jump / an emulated takeoff (vz > 0) or a DD lift
+			g_bTakeoffDD[id] = (vel[2] <= 0.0);
 			g_fTakeoff[id] = floatsqroot(vel[0] * vel[0] + vel[1] * vel[1]);
 			g_iTakeoffFog[id] = (g_iGround[id] > 0) ? g_iGround[id] : 1;
 			g_iTakeoffSrc[id] = speed_fog_source(id);
@@ -407,8 +418,8 @@ public fw_CmdEnd_Post(id)
 			g_iLandDuck[id] = -1;
 			g_bShowTakeoff[id] = true;
 			if (get_pcvar_num(g_pDebug))
-				log_to_file("fog_debug.log", "SPDJ id=%d fog=%d src=%d duck=%d xy=%.3f vz=%.3f",
-					id, g_iTakeoffFog[id], g_iTakeoffSrc[id], g_iTakeoffDuck[id], g_fTakeoff[id], vel[2]);
+				log_to_file("fog_debug.log", "SPDJ id=%d fog=%d src=%d dd=%d duck=%d xy=%.3f vz=%.3f",
+					id, g_iTakeoffFog[id], g_iTakeoffSrc[id], g_bTakeoffDD[id] ? 1 : 0, g_iTakeoffDuck[id], g_fTakeoff[id], vel[2]);
 		}
 	}
 	else
@@ -441,6 +452,7 @@ public fw_CmdEnd_Post(id)
 			g_iTakeoffFog[id] = -1;
 			g_iTakeoffSrc[id] = 0;
 			g_iTakeoffDuck[id] = -1;
+			g_bTakeoffDD[id] = false;
 			g_bShowTakeoff[id] = true;
 		}
 		else if (postGround && !get_pcvar_num(g_pKeep))
@@ -496,9 +508,9 @@ speed_draw(id, const Float:vel[3])
 		if (fog >= 0 && fog <= get_pcvar_num(g_pFogMax))
 		{
 			if (get_pcvar_num(g_pFogMode) && src > 0 && src != fog)
-				format(text, charsmax(text), "%s^n(%.2f)^nFOG: %d (f%d)", text, g_fTakeoff[id], src, fog);
+				format(text, charsmax(text), "%s^n(%.2f)^n%sFOG: %d (f%d)", text, g_fTakeoff[id], g_bTakeoffDD[id] ? "DD " : "", src, fog);
 			else
-				format(text, charsmax(text), "%s^n(%.2f)^nFOG: %d", text, g_fTakeoff[id], fog);
+				format(text, charsmax(text), "%s^n(%.2f)^n%sFOG: %d", text, g_fTakeoff[id], g_bTakeoffDD[id] ? "DD " : "", fog);
 			if (g_iTakeoffDuck[id] >= 0 && get_pcvar_num(g_pShowDuck))
 				format(text, charsmax(text), "%s^nD: %d", text, g_iTakeoffDuck[id]);
 		}
