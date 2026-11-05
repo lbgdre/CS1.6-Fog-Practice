@@ -61,7 +61,8 @@
 // message alive. (gcljs sends one per usercmd with hold 0.02, i.e. two stacked messages with
 // different numbers -> the overlapping digits.)
 
-new g_pEnable, g_pX, g_pY, g_pColor, g_pFogMax, g_pKeep, g_pHold, g_pFogMode, g_pDebug, g_pShowDuck;
+new g_pEnable, g_pX, g_pY, g_pColor, g_pFogMax, g_pKeep, g_pHold, g_pFogMode, g_pDebug, g_pShowDuck, g_pStyle;
+new g_hSync;
 
 new bool:g_bOn[MAXP];
 new bool:g_bArmed[MAXP];
@@ -89,7 +90,9 @@ public plugin_init()
 	g_pColor   = create_cvar("speed_hud_color", "255 255 255", FCVAR_NONE, "HUD color R G B");
 	g_pFogMax  = create_cvar("speed_hud_fog_max", "8", FCVAR_NONE, "Show FOG only when <= this (gcljs MAX_BHOP_FRAMES = 8)", true, 0.0, true, 1000.0);
 	g_pKeep    = create_cvar("speed_hud_keep", "0", FCVAR_NONE, "1 = keep the last takeoff speed after landing", true, 0.0, true, 1.0);
-	g_pHold    = create_cvar("speed_hud_hold", "0.05", FCVAR_NONE, "HUD update interval = DHUD hold time (equal, so messages never stack)", true, 0.01, true, 1.0);
+	g_pHold    = create_cvar("speed_hud_hold", "0.02", FCVAR_NONE, "Big-font (DHUD) refresh interval = hold time; lower = smoother but may stack", true, 0.01, true, 1.0);
+	g_pStyle   = create_cvar("speed_hud_style", "0", FCVAR_NONE, "0 = big font (DHUD), 1 = normal HUD font (redraws every usercmd, never overlaps)", true, 0.0, true, 1.0);
+	g_hSync    = CreateHudSyncObj();
 	g_pFogMode = create_cvar("speed_hud_fog_mode", "1", FCVAR_NONE, "1 = FOG whose speed you got (fog_practice src), 0 = frame you left the ground on", true, 0.0, true, 1.0);
 	g_pDebug   = create_cvar("speed_hud_debug", "0", FCVAR_NONE, "1 = log each takeoff (SPDJ) to addons/amxmodx/logs/fog_debug.log", true, 0.0, true, 1.0);
 	g_pShowDuck = create_cvar("speed_hud_duck", "1", FCVAR_NONE, "1 = show D: frames ducked in the air before the landing", true, 0.0, true, 1.0);
@@ -305,6 +308,7 @@ speed_save_cfg()
 	fprintf(f, "speed_hud_fog_max %d^n", get_pcvar_num(g_pFogMax));
 	speed_fmt3(get_pcvar_float(g_pHold), num, charsmax(num));
 	fprintf(f, "speed_hud_hold %s^n", num);
+	fprintf(f, "speed_hud_style %d^n", get_pcvar_num(g_pStyle));
 	fprintf(f, "speed_hud_debug %d^n", get_pcvar_num(g_pDebug));
 	fclose(f);
 }
@@ -472,11 +476,18 @@ speed_draw(id, const Float:vel[3])
 
 	// gametime here is the client's svtimebase (set before PostThink in SV_RunCmd), +10 ms per cmd;
 	// the 0.001 tolerance keeps float rounding from skipping a due update.
-	new Float:hold = get_pcvar_float(g_pHold);
+	// style 1 (normal HUD font): channel-based, every message replaces the previous one, so it can
+	// redraw on every usercmd with a longer hold and never stacks. style 0 (big DHUD): stack-based,
+	// refresh interval == hold (speed_hud_hold).
+	new bool:dhud = (get_pcvar_num(g_pStyle) == 0);
+	new Float:hold = dhud ? get_pcvar_float(g_pHold) : 0.1;
 	new Float:now = get_gametime();
-	if (now + 0.001 < g_fNextHud[id] && now > g_fNextHud[id] - 1.0)
-		return;
-	g_fNextHud[id] = now + hold;
+	if (dhud)
+	{
+		if (now + 0.001 < g_fNextHud[id] && now > g_fNextHud[id] - 1.0)
+			return;
+		g_fNextHud[id] = now + hold;
+	}
 
 	new text[96];
 	formatex(text, charsmax(text), "%d", floatround(floatsqroot(vel[0] * vel[0] + vel[1] * vel[1])));
@@ -513,7 +524,15 @@ speed_draw(id, const Float:vel[3])
 			continue;
 		if (viewer != id && (is_user_alive(viewer) || pev(viewer, pev_iuser2) != id))
 			continue;
-		set_dhudmessage(r, g, b, x, y, 0, 0.0, hold, 0.0, 0.0);
-		show_dhudmessage(viewer, "%s", text);
+		if (dhud)
+		{
+			set_dhudmessage(r, g, b, x, y, 0, 0.0, hold, 0.0, 0.0);
+			show_dhudmessage(viewer, "%s", text);
+		}
+		else
+		{
+			set_hudmessage(r, g, b, x, y, 0, 0.0, hold, 0.0, 0.0, -1);
+			ShowSyncHudMsg(viewer, g_hSync, "%s", text);
+		}
 	}
 }

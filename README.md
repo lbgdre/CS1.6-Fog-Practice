@@ -64,7 +64,8 @@ To rebuild from source, run `amxxpc fog_practice.sma` and `amxxpc speed_hud.sma`
 | `speed_hud_fog_mode` | 1 | 1 = FOG whose speed you got (`FOG: 2 (f3)` after a rewrite), 0 = frame you left the ground on |
 | `speed_hud_duck` | 1 | show `D: n` (usercmds ducked in the air before the landing) |
 | `speed_hud_keep` | 0 | keep the takeoff line after landing |
-| `speed_hud_hold` | 0.05 | update interval = DHUD hold time (kept equal so messages never stack) |
+| `speed_hud_hold` | 0.02 | big-font refresh interval = hold time (DHUD messages stack, so lower is smoother but can overlap) |
+| `speed_hud_style` | 0 | 0 = big font (DHUD), 1 = normal HUD font: redraws every usercmd and never overlaps |
 | `speed_hud_debug` | 0 | log `SPDJ` lines next to fog_practice's `FOGJ` |
 
 ### Menus
