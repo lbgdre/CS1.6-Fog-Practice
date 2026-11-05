@@ -136,9 +136,6 @@ new const g_szAct[][] = { "none", "ground", "jump", "emul", "strip" };
 
 new const g_szLogFile[] = "fog_debug.log";   // -> addons/amxmodx/logs/fog_debug.log
 
-#define TASK_NOTICE         7319100
-#define NOTICE_DELAY        6.0
-
 // ---- cvars ----
 new g_pEnable, g_pMax, g_pFixVz, g_pDebug;
 new g_pFriction, g_pStopSpeed, g_pEdgeFriction, g_pAccelerate, g_pAirAccelerate;
@@ -267,27 +264,14 @@ public client_putinserver(id)
 	g_bInCmd[id] = false;
 	g_bPreGround[id] = false;
 	fog_reset(id);
-	if (!is_user_bot(id))
-		set_task(NOTICE_DELAY, "task_notice", TASK_NOTICE + id);
 }
 
 public client_disconnected(id)
 {
-	remove_task(TASK_NOTICE + id);
 	g_bOn[id] = false;
 	g_bInCmd[id] = false;
 	g_bPreGround[id] = false;
 	fog_reset(id);
-}
-
-public task_notice(taskid)
-{
-	new id = taskid - TASK_NOTICE;
-	if (!is_user_connected(id) || !get_pcvar_num(g_pEnable))
-		return;
-	client_print(id, print_chat, "[FOG] Practice tool ON: your bhops get the best of FOG 1-3. NOT legit for records!");
-	client_print(id, print_chat, "[FOG] Type /fog to turn it off before any record / timed run / demo.");
-	console_print(id, "[FOG] fog_practice is a PRACTICE tool (optimal-FOG strafe testing). Runs, jumpstats and demos made with it are NOT legit. Disable with /fog or fog_enable 0.");
 }
 
 public cmd_fog(id)
