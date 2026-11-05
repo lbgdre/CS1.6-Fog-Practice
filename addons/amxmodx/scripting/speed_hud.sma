@@ -57,7 +57,7 @@
 #define MAXP            33
 // DHUD (director) messages are STACK-based, not channel-based (amxmodx.inc, show_dhudmessage:
 // "You can have up to 8 messages displaying at once"): a new one never replaces the old one.
-#define HUD_INTERVAL    0.01    // big-font redraw interval (v1.0.0 / gcljs timing)
+#define HUD_INTERVAL_MS 10      // big-font redraw every 10 ms of usercmd time (gcljs timing)
 
 new g_pEnable, g_pX, g_pY, g_pColor, g_pFogMax, g_pKeep, g_pHold, g_pFogMode, g_pDebug, g_pShowDuck, g_pStyle;
 new g_hSync;
@@ -71,7 +71,7 @@ new bool:g_bShowTakeoff[MAXP];
 new Float:g_fTakeoff[MAXP];
 new g_iTakeoffFog[MAXP];        // takeoff frame; -1 = ladder jump / no FOG
 new g_iTakeoffSrc[MAXP];        // fog_practice source frame; 0 = unknown
-new Float:g_fNextHud[MAXP];
+new g_iHudMs[MAXP];             // usercmd milliseconds since the last big-font redraw
 
 new g_iDuckRun[MAXP];           // current/last continuous ducked run in this air phase
 new bool:g_bPrevAirDuck[MAXP];  // previous air usercmd had IN_DUCK
@@ -347,7 +347,7 @@ speed_reset(id)
 	g_fTakeoff[id] = 0.0;
 	g_iTakeoffFog[id] = -1;
 	g_iTakeoffSrc[id] = 0;
-	g_fNextHud[id] = 0.0;
+	g_iHudMs[id] = HUD_INTERVAL_MS;
 	g_iDuckRun[id] = 0;
 	g_bPrevAirDuck[id] = false;
 	g_iLandDuck[id] = -1;
@@ -484,19 +484,21 @@ speed_draw(id, const Float:vel[3])
 	if (!get_pcvar_num(g_pEnable))
 		return;
 
-	// style 0 (big DHUD): same timing as v1.0.0 / gcljs, which looked right in game: redraw at most
-	// every HUD_INTERVAL (10 ms = every usercmd at 100 fps) with holdtime speed_hud_hold (0.02).
-	// A hold equal to the refresh (0.01/0.01) flickers and doubles: the 10 ms server updates drift
-	// against the client's frames (fps_max 99.5 = 10.05 ms), so a 1-frame message is shown 0 or 2
-	// times. style 1 (normal HUD font): channel-based, every message replaces the previous one.
+	// style 0 (big DHUD): redraw every HUD_INTERVAL_MS of usercmd time with holdtime speed_hud_hold
+	// (0.02), the gcljs timing. The interval is counted in whole usercmd msec (an exact integer):
+	// comparing gpGlobals->time (a 32-bit float) against "last + 0.01" skipped a varying share of
+	// frames as the map clock grew (68-99 Hz instead of 100). A hold equal to the refresh flickers.
+	// style 1 (normal HUD font): channel-based, every message replaces the previous one.
 	new bool:dhud = (get_pcvar_num(g_pStyle) == 0);
 	new Float:hold = dhud ? get_pcvar_float(g_pHold) : 0.1;
-	new Float:now = get_gametime();
 	if (dhud)
 	{
-		if (now < g_fNextHud[id] && now > g_fNextHud[id] - 1.0)
+		g_iHudMs[id] += g_iMsec[id];
+		if (g_iHudMs[id] < HUD_INTERVAL_MS)
 			return;
-		g_fNextHud[id] = now + HUD_INTERVAL;
+		g_iHudMs[id] -= HUD_INTERVAL_MS;
+		if (g_iHudMs[id] > HUD_INTERVAL_MS)      // e.g. after a long (chopped) usercmd
+			g_iHudMs[id] = 0;
 	}
 
 	new text[96];
