@@ -180,7 +180,7 @@ speed_menu_show(id, page)
 	num_to_str(SM_ITEM_FOGMODE, info, charsmax(info));
 	menu_additem(menu, item, info, ADMIN_CVAR);
 
-	formatex(item, charsmax(item), "DUCK line: %s", get_pcvar_num(g_pShowDuck) ? "\yON" : "\rOFF");
+	formatex(item, charsmax(item), "Duck in air: %s", get_pcvar_num(g_pShowDuck) ? "\yON" : "\rOFF");
 	num_to_str(SM_ITEM_DUCK, info, charsmax(info));
 	menu_additem(menu, item, info, ADMIN_CVAR);
 

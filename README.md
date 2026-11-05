@@ -72,7 +72,7 @@ To rebuild from source, run `amxxpc fog_practice.sma` and `amxxpc speed_hud.sma`
 
 Each plugin has its own menu.
 - **`/fogmenu`** (fog_practice): plugin for me, plugin for everyone, jump: best of FOG 1 to N (1-3), DD gets first frame, DD: best of first N frames (1-5), rewrite uses earlier jump height, debug output on/off.
-- **`/speedmenu`** (speed_hud): HUD on/off, what FOG shows, the D (duck) line, color, height (0.55-0.85 in 0.05 steps), horizontal position, show FOG up to, debug log.
+- **`/speedmenu`** (speed_hud): HUD on/off, what FOG shows, duck in air (the `D:` line), color, height (0.55-0.85 in 0.05 steps), horizontal position, show FOG up to, debug log.
 
 "For me" items work for everyone. Server-wide items need cvar access (flag `g`). On a listen server the host has it.
 Menu changes are saved to `addons/amxmodx/configs/fog_practice.cfg` and `speed_hud.cfg`, which are loaded on every map start. Delete those files to reset to defaults.
