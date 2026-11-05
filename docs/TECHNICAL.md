@@ -47,7 +47,7 @@ current speed, then `(takeoff speed)` and `FOG: n` while airborne. Spectators wa
   - `speed_hud_color` ("255 255 255")
   - `speed_hud_fog_max` (8): hide FOG above this
   - `speed_hud_keep` (0): 1 keeps the takeoff line after landing
-  - `speed_hud_hold` (0.03, big-font refresh = hold time), `speed_hud_style` (0 big font, default; 1 normal HUD font: every usercmd, never overlaps)
+  - `speed_hud_hold` (0.02, big-font hold time; redraws every usercmd), `speed_hud_style` (0 big font, default; 1 normal HUD font: every usercmd, never overlaps)
 - Toggle: `say /speedhud` or the console command `speedhud`.
 - Turn off the KZ plugin's own speed display in its menu so the two don't overlap.
 

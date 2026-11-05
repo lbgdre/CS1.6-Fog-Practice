@@ -57,9 +57,7 @@
 #define MAXP            33
 // DHUD (director) messages are STACK-based, not channel-based (amxmodx.inc, show_dhudmessage:
 // "You can have up to 8 messages displaying at once"): a new one never replaces the old one.
-// So the HUD is redrawn at a fixed interval with holdtime == interval, keeping exactly one
-// message alive. (gcljs sends one per usercmd with hold 0.02, i.e. two stacked messages with
-// different numbers -> the overlapping digits.)
+#define HUD_INTERVAL    0.01    // big-font redraw interval (v1.0.0 / gcljs timing)
 
 new g_pEnable, g_pX, g_pY, g_pColor, g_pFogMax, g_pKeep, g_pHold, g_pFogMode, g_pDebug, g_pShowDuck, g_pStyle;
 new g_hSync;
@@ -90,7 +88,7 @@ public plugin_init()
 	g_pColor   = create_cvar("speed_hud_color", "255 255 255", FCVAR_NONE, "HUD color R G B");
 	g_pFogMax  = create_cvar("speed_hud_fog_max", "8", FCVAR_NONE, "Show FOG only when <= this (gcljs MAX_BHOP_FRAMES = 8)", true, 0.0, true, 1000.0);
 	g_pKeep    = create_cvar("speed_hud_keep", "0", FCVAR_NONE, "1 = keep the last takeoff speed after landing", true, 0.0, true, 1.0);
-	g_pHold    = create_cvar("speed_hud_hold", "0.03", FCVAR_NONE, "Big-font (DHUD) refresh interval = hold time; lower = smoother but may stack", true, 0.01, true, 1.0);
+	g_pHold    = create_cvar("speed_hud_hold", "0.02", FCVAR_NONE, "Big-font (DHUD) hold time; redraw is every usercmd (gcljs / v1.0.0: 0.02)", true, 0.01, true, 1.0);
 	g_pStyle   = create_cvar("speed_hud_style", "0", FCVAR_NONE, "0 = big font (DHUD), 1 = normal HUD font (redraws every usercmd, never overlaps)", true, 0.0, true, 1.0);
 	g_hSync    = CreateHudSyncObj();
 	g_pFogMode = create_cvar("speed_hud_fog_mode", "1", FCVAR_NONE, "1 = FOG whose speed you got (fog_practice src), 0 = frame you left the ground on", true, 0.0, true, 1.0);
@@ -474,19 +472,19 @@ speed_draw(id, const Float:vel[3])
 	if (!get_pcvar_num(g_pEnable))
 		return;
 
-	// gametime here is the client's svtimebase (set before PostThink in SV_RunCmd), +10 ms per cmd;
-	// the 0.001 tolerance keeps float rounding from skipping a due update.
-	// style 1 (normal HUD font): channel-based, every message replaces the previous one, so it can
-	// redraw on every usercmd with a longer hold and never stacks. style 0 (big DHUD): stack-based,
-	// refresh interval == hold (speed_hud_hold).
+	// style 0 (big DHUD): same timing as v1.0.0 / gcljs, which looked right in game: redraw at most
+	// every HUD_INTERVAL (10 ms = every usercmd at 100 fps) with holdtime speed_hud_hold (0.02).
+	// A hold equal to the refresh (0.01/0.01) flickers and doubles: the 10 ms server updates drift
+	// against the client's frames (fps_max 99.5 = 10.05 ms), so a 1-frame message is shown 0 or 2
+	// times. style 1 (normal HUD font): channel-based, every message replaces the previous one.
 	new bool:dhud = (get_pcvar_num(g_pStyle) == 0);
 	new Float:hold = dhud ? get_pcvar_float(g_pHold) : 0.1;
 	new Float:now = get_gametime();
 	if (dhud)
 	{
-		if (now + 0.001 < g_fNextHud[id] && now > g_fNextHud[id] - 1.0)
+		if (now < g_fNextHud[id] && now > g_fNextHud[id] - 1.0)
 			return;
-		g_fNextHud[id] = now + hold;
+		g_fNextHud[id] = now + HUD_INTERVAL;
 	}
 
 	new text[96];
