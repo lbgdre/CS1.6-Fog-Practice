@@ -49,7 +49,7 @@ To rebuild from source, run `amxxpc fog_practice.sma` and `amxxpc speed_hud.sma`
 | `fog_fix_vz` | 1 | on a backward rewrite, also use the earlier frame's jump height |
 | `fog_debug` | 0 | 1 = summary to console + full log in `addons/amxmodx/logs/fog_debug.log`; 2 = full detail to console |
 | `fog_dd` | 1 | double duck: give the speed of a DD pressed on the first possible frame |
-| `fog_dd_max` | 3 | correct DDs within the first N possible DD FOGs (1-3) |
+| `fog_dd_max` | 3 | DD: best of the first N possible DD FOGs (1-5; 1 = no correction) |
 
 ### speed_hud
 
@@ -71,7 +71,7 @@ To rebuild from source, run `amxxpc fog_practice.sma` and `amxxpc speed_hud.sma`
 ### Menus
 
 Each plugin has its own menu.
-- **`/fogmenu`** (fog_practice): plugin for me, plugin for everyone, best of FOG 1 to N, rewrite uses earlier jump height, debug output on/off, DD gets first frame.
+- **`/fogmenu`** (fog_practice): plugin for me, plugin for everyone, jump: best of FOG 1 to N (1-3), DD gets first frame, DD: best of first N frames (1-5), rewrite uses earlier jump height, debug output on/off.
 - **`/speedmenu`** (speed_hud): HUD on/off, what FOG shows, the D (duck) line, color, height (0.55-0.85 in 0.05 steps), horizontal position, show FOG up to, debug log.
 
 "For me" items work for everyone. Server-wide items need cvar access (flag `g`). On a listen server the host has it.
@@ -87,7 +87,7 @@ DD has no 300 cap, so the earliest DD is the fastest. That's the minimum "DD FOG
 - 2 after a standing landing (gs)
 - 3 after a ducked landing, because the first frame is spent standing up (sgs / standup variants)
 
-With `fog_dd 1`, a DD whose lift lands within the first `fog_dd_max` (default 3) possible DD FOGs gets the speed of a DD pressed on the first possible frame. On the lift frame, before movement runs, the plugin replaces your velocity with your recorded first-frame state run through one press frame (friction plus x0.333 accel). The engine then runs the lift itself.
+With `fog_dd 1`, a DD whose lift lands within the first `fog_dd_max` (default 3, range 1-5) possible DD FOGs gets the speed of a DD pressed on the first possible frame. On the lift frame, before movement runs, the plugin replaces your velocity with your recorded first-frame state run through one press frame (friction plus x0.333 accel). The engine then runs the lift itself.
 - Lift timing and position are unchanged, like a bhop rewrite.
 - The final jump of a CJ / MCJ is a normal bhop and gets the normal best-of-FOG treatment.
 - Debug lines: `FOGD` (lift frame, press frame, first possible frame, before/after speed, and a note: `already-first`, `too-late`, `not-better`, or a skip reason).

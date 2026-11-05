@@ -88,6 +88,7 @@
 
 #define MAXP            33
 #define MAX_FOG         3
+#define MAX_DD_FOG      5       // fog_dd_max upper bound
 #define REC             7       // ground frames 1..6 are recorded (index 0 unused)
 
 // ---- constants from [PM] ----
@@ -209,7 +210,7 @@ public plugin_init()
 	g_pFixVz  = create_cvar("fog_fix_vz", "1", FCVAR_NONE, "Backward rewrite also uses the earlier frame's jump vz", true, 0.0, true, 1.0);
 	g_pDebug  = create_cvar("fog_debug", "0", FCVAR_NONE, "0 off, 1 summary to console + full log, 2 full to console too", true, 0.0, true, 2.0);
 	g_pDD     = create_cvar("fog_dd", "1", FCVAR_NONE, "Double duck: give the speed of a DD pressed on the first possible frame", true, 0.0, true, 1.0);
-	g_pDDMax  = create_cvar("fog_dd_max", "3", FCVAR_NONE, "Correct a DD pressed on the first N possible frames (1-3)", true, 1.0, true, 3.0);
+	g_pDDMax  = create_cvar("fog_dd_max", "3", FCVAR_NONE, "DD: best of the first N possible DD FOGs (1-5; 1 = no correction)", true, 1.0, true, 5.0);
 
 	// movevars sources (engine cvars; names as registered by the engine)
 	g_pFriction      = get_cvar_pointer("sv_friction");
@@ -300,7 +301,7 @@ public cmd_fog(id)
 // Changed cvars are saved to addons/amxmodx/configs/fog_practice.cfg and exec'd in plugin_cfg.
 enum
 {
-	FM_ITEM_ME = 1, FM_ITEM_ENABLE, FM_ITEM_MAX, FM_ITEM_FIXVZ, FM_ITEM_DEBUG, FM_ITEM_DD
+	FM_ITEM_ME = 1, FM_ITEM_ENABLE, FM_ITEM_MAX, FM_ITEM_FIXVZ, FM_ITEM_DEBUG, FM_ITEM_DD, FM_ITEM_DDMAX
 };
 
 public cmd_fogmenu(id)
@@ -324,8 +325,16 @@ fog_menu_show(id)
 	num_to_str(FM_ITEM_ENABLE, info, charsmax(info));
 	menu_additem(menu, item, info, ADMIN_CVAR);
 
-	formatex(item, charsmax(item), "Best of FOG 1 to: \y%d", clamp(get_pcvar_num(g_pMax), 1, MAX_FOG));
+	formatex(item, charsmax(item), "Jump: best of FOG 1 to: \y%d", clamp(get_pcvar_num(g_pMax), 1, MAX_FOG));
 	num_to_str(FM_ITEM_MAX, info, charsmax(info));
+	menu_additem(menu, item, info, ADMIN_CVAR);
+
+	formatex(item, charsmax(item), "DD gets first frame: %s", get_pcvar_num(g_pDD) ? "\yON" : "\rOFF");
+	num_to_str(FM_ITEM_DD, info, charsmax(info));
+	menu_additem(menu, item, info, ADMIN_CVAR);
+
+	formatex(item, charsmax(item), "DD: best of first frames: \y%d", clamp(get_pcvar_num(g_pDDMax), 1, MAX_DD_FOG));
+	num_to_str(FM_ITEM_DDMAX, info, charsmax(info));
 	menu_additem(menu, item, info, ADMIN_CVAR);
 
 	formatex(item, charsmax(item), "Rewrite uses earlier jump height: %s", get_pcvar_num(g_pFixVz) ? "\yON" : "\rOFF");
@@ -334,10 +343,6 @@ fog_menu_show(id)
 
 	formatex(item, charsmax(item), "Debug output: %s", get_pcvar_num(g_pDebug) ? "\yON" : "\rOFF");
 	num_to_str(FM_ITEM_DEBUG, info, charsmax(info));
-	menu_additem(menu, item, info, ADMIN_CVAR);
-
-	formatex(item, charsmax(item), "DD gets first frame: %s", get_pcvar_num(g_pDD) ? "\yON" : "\rOFF");
-	num_to_str(FM_ITEM_DD, info, charsmax(info));
 	menu_additem(menu, item, info, ADMIN_CVAR);
 
 	menu_setprop(menu, MPROP_EXIT, MEXIT_ALL);
@@ -376,6 +381,7 @@ public fog_menu_handler(id, menu, item)
 		case FM_ITEM_FIXVZ:  set_pcvar_num(g_pFixVz, get_pcvar_num(g_pFixVz) ? 0 : 1);
 		case FM_ITEM_DEBUG:  set_pcvar_num(g_pDebug, get_pcvar_num(g_pDebug) ? 0 : 1);   // 2 (full) via cvar only
 		case FM_ITEM_DD:     set_pcvar_num(g_pDD, get_pcvar_num(g_pDD) ? 0 : 1);
+		case FM_ITEM_DDMAX:  set_pcvar_num(g_pDDMax, clamp(get_pcvar_num(g_pDDMax), 1, MAX_DD_FOG) % MAX_DD_FOG + 1);
 	}
 	if (save)
 		fog_save_cfg();
@@ -402,7 +408,7 @@ fog_save_cfg()
 	fprintf(f, "fog_fix_vz %d^n", get_pcvar_num(g_pFixVz));
 	fprintf(f, "fog_debug %d^n", get_pcvar_num(g_pDebug));
 	fprintf(f, "fog_dd %d^n", get_pcvar_num(g_pDD));
-	fprintf(f, "fog_dd_max %d^n", clamp(get_pcvar_num(g_pDDMax), 1, 3));
+	fprintf(f, "fog_dd_max %d^n", clamp(get_pcvar_num(g_pDDMax), 1, MAX_DD_FOG));
 	fclose(f);
 }
 
@@ -830,7 +836,7 @@ fog_dd_lift(id, c, flags, buttons, const Float:vel[3])
 		copy(g_iDDWhy[id], charsmax(g_iDDWhy[]), "already-first");
 		return;
 	}
-	if (c - (e + 1) >= clamp(get_pcvar_num(g_pDDMax), 1, 3))
+	if (c - (e + 1) >= clamp(get_pcvar_num(g_pDDMax), 1, MAX_DD_FOG))
 	{
 		copy(g_iDDWhy[id], charsmax(g_iDDWhy[]), "too-late");
 		return;
