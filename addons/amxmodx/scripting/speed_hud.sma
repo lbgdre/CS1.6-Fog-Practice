@@ -3,7 +3,7 @@
  *
  * Credit: the HUD layout (centered DHUD at y 0.7, speed / (takeoff speed) / FOG: n, 0.02 hold,
  * FOG shown up to 8) follows the speed panel of gcljs by GameChaos
- * (https://bitbucket.org/GameChaos/gcljs). No gcljs code is used; the detection logic is new.
+ * (https://codeberg.org/GameChaos/gcljs). No gcljs code is used; the detection logic is new.
  *
  * Layout:
  *
