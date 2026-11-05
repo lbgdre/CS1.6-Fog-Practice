@@ -1404,9 +1404,10 @@ fog_warn(id, const msg[])
 
 fog_log_movevars()
 {
-	log_to_file(g_szLogFile, "FOGC friction=%.4f stopspeed=%.4f edgefriction=%.4f accelerate=%.4f airaccelerate=%.4f gravity=%.4f maxspeed=%.4f rollangle=%.4f rollspeed=%.4f fog_max=%d fix_vz=%d",
+	log_to_file(g_szLogFile, "FOGC friction=%.4f stopspeed=%.4f edgefriction=%.4f accelerate=%.4f airaccelerate=%.4f gravity=%.4f maxspeed=%.4f rollangle=%.4f rollspeed=%.4f fog_max=%d fix_vz=%d fog_dd=%d fog_dd_max=%d",
 		mv_friction, mv_stopspeed, mv_edgefriction, mv_accelerate, mv_airaccelerate, mv_gravity, mv_maxspeed,
-		mv_rollangle, mv_rollspeed, clamp(get_pcvar_num(g_pMax), 1, MAX_FOG), get_pcvar_num(g_pFixVz));
+		mv_rollangle, mv_rollspeed, clamp(get_pcvar_num(g_pMax), 1, MAX_FOG), get_pcvar_num(g_pFixVz),
+		get_pcvar_num(g_pDD), clamp(get_pcvar_num(g_pDDMax), 1, MAX_DD_FOG));
 }
 
 fog_log_frame(id, c, bool:air)
