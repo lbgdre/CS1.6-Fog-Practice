@@ -36,7 +36,7 @@
  *              the takeoff frame.
  *   ladder jump = started on a ladder (MOVETYPE_FLY), ended walking in the air with IN_JUMP held;
  *              shown without FOG (like gcljs).
- *   Prev: d  = distance of your previous bhop / standup bhop, measured like jumpstats (gcljs
+ *   DIST: d  = distance of your previous bhop / standup bhop, measured like jumpstats (gcljs
  *              GetRealLandingOrigin / KZ LJ stats): feet position at takeoff -> the point where the
  *              feet path crosses the landing height inside the landing usercmd, horizontal distance
  *              + 32 (player box width). "(+1.6)" = landed that many units higher/lower (offset).
@@ -116,7 +116,7 @@ public plugin_init()
 	g_pShowDuck = create_cvar("speed_hud_duck", "1", FCVAR_NONE, "1 = show D: frames ducked in the air before the landing", true, 0.0, true, 1.0);
 	g_pShowSpeed   = create_cvar("speed_hud_show_speed", "1", FCVAR_NONE, "1 = show the current speed line", true, 0.0, true, 1.0);
 	g_pShowTakeoff = create_cvar("speed_hud_show_takeoff", "1", FCVAR_NONE, "1 = show the (takeoff speed) line", true, 0.0, true, 1.0);
-	g_pShowDist    = create_cvar("speed_hud_show_dist", "1", FCVAR_NONE, "1 = show Prev: distance of the previous bhop / standup bhop", true, 0.0, true, 1.0);
+	g_pShowDist    = create_cvar("speed_hud_show_dist", "1", FCVAR_NONE, "1 = show DIST: distance of the previous bhop / standup bhop", true, 0.0, true, 1.0);
 
 	register_forward(FM_CmdStart, "fw_CmdStart", 0);
 	register_forward(FM_CmdEnd, "fw_CmdEnd_Post", 1);
@@ -660,9 +660,9 @@ speed_draw(id, const Float:vel[3])
 	{
 		new Float:dz = g_fPrevDz[id];
 		if (floatabs(dz) <= OFFSET_TOL)
-			formatex(line, charsmax(line), "Prev: %.3f", g_fPrevDist[id]);
+			formatex(line, charsmax(line), "DIST: %.3f", g_fPrevDist[id]);
 		else
-			formatex(line, charsmax(line), "Prev: %.3f (%s%.1f)", g_fPrevDist[id], (dz > 0.0) ? "+" : "-", floatabs(dz));
+			formatex(line, charsmax(line), "DIST: %.3f (%s%.1f)", g_fPrevDist[id], (dz > 0.0) ? "+" : "-", floatabs(dz));
 		speed_line(text, charsmax(text), line);
 	}
 	if (!text[0])

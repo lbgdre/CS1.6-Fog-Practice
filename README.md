@@ -60,7 +60,7 @@ Two AMX Mod X plugins for **Counter-Strike 1.6** bhop practice on a local listen
 | HUD | on/off |
 | Current speed | show your current speed |
 | Takeoff speed | show the `(takeoff speed)` line |
-| Previous jump distance | show `Prev:` the distance of your last bhop or standup bhop, measured like jumpstats |
+| Previous jump distance | show `DIST:`, the distance of your last bhop or standup bhop, measured like jumpstats |
 | FOG shows | the frame your speed came from, or the frame you left the ground on |
 | Duck in air | show the `D:` line |
 | Color | white, green, yellow, cyan, orange, red, pink |
@@ -79,12 +79,12 @@ Settings you change in the menus are saved and loaded on every map start. To res
 (291.97)        takeoff speed of this jump
 FOG: 2          frames on ground before the takeoff
 D: 6            frames you held duck in the air before landing
-Prev: 248.312   distance of your previous bhop / standup bhop
+DIST: 248.312   distance of your previous bhop / standup bhop
 ```
 
 - `FOG: 2 (f3)`: FOG Practice gave you FOG 2's speed, but you left the ground on frame 3.
 - `DD FOG: 2`: the takeoff was a double duck. The best possible is 2, or 3 after landing ducked.
-- `Prev: 248.312 (+1.6)`: you landed 1.6 units higher than you took off (offset jump).
+- `DIST: 248.312 (+1.6)`: you landed 1.6 units higher than you took off (offset jump).
 
 ## Optional: check the plugin against the engine
 
