@@ -36,6 +36,10 @@
  *              the takeoff frame.
  *   ladder jump = started on a ladder (MOVETYPE_FLY), ended walking in the air with IN_JUMP held;
  *              shown without FOG (like gcljs).
+ *   Prev: d  = distance of your previous bhop / standup bhop, measured like jumpstats (gcljs
+ *              GetRealLandingOrigin / KZ LJ stats): feet position at takeoff -> the point where the
+ *              feet path crosses the landing height inside the landing usercmd, horizontal distance
+ *              + 32 (player box width). "(+1.6)" = landed that many units higher/lower (offset).
  *   D: n     = on a bhop takeoff (FOG shown): length of your last continuous duck in the air
  *              before the landing that this jump came from, in usercmds (msec > 0) with IN_DUCK
  *              held; the landing usercmd counts as an air frame (it starts in the air).
@@ -51,7 +55,7 @@
 #pragma semicolon 1
 
 #define PLUGIN_NAME     "Speed HUD"
-#define PLUGIN_VERSION  "1.3.0"
+#define PLUGIN_VERSION  "1.4.0"
 #define PLUGIN_AUTHOR   "local"
 
 #define MAXP            33
@@ -60,6 +64,11 @@
 #define HUD_INTERVAL_MS 10      // big-font redraw every 10 ms of usercmd time (gcljs timing)
 
 new g_pEnable, g_pX, g_pY, g_pColor, g_pFogMax, g_pKeep, g_pHold, g_pFogMode, g_pDebug, g_pShowDuck, g_pStyle;
+new g_pShowSpeed, g_pShowTakeoff, g_pShowDist;
+
+#define BHOP_MAX_FOG    8       // a jump this soon after landing is a bhop (gcljs MAX_BHOP_FRAMES)
+#define OFFSET_TOL      0.5     // landing height == takeoff height within this (gcljs bhop tolerance)
+#define BOX_WIDTH       32.0    // jumpstats add the player box width to the origin distance
 new g_hSync;
 
 new bool:g_bOn[MAXP];
@@ -80,6 +89,15 @@ new bool:g_bTakeoffDD[MAXP];    // the shown takeoff is a double-duck lift
 new g_iLandDuck[MAXP];          // g_iDuckRun at the last landing; -1 = no landing to report
 new g_iTakeoffDuck[MAXP];       // value shown for the current jump; -1 = none
 
+// previous-jump distance
+new Float:g_vPreOrigin[MAXP][3];  // pev->origin at FM_CmdStart
+new Float:g_vPreVel[MAXP][3];     // pev->velocity at FM_CmdStart
+new Float:g_vJumpPos[MAXP][3];    // feet position at takeoff
+new Float:g_vLastOrigin[MAXP][3]; // pev->origin at the previous FM_CmdEnd (teleport check)
+new bool:g_bTracking[MAXP];
+new bool:g_bHavePrev[MAXP];
+new Float:g_fPrevDist[MAXP], Float:g_fPrevDz[MAXP];
+
 public plugin_init()
 {
 	register_plugin(PLUGIN_NAME, PLUGIN_VERSION, PLUGIN_AUTHOR);
@@ -96,6 +114,9 @@ public plugin_init()
 	g_pFogMode = create_cvar("speed_hud_fog_mode", "1", FCVAR_NONE, "1 = FOG whose speed you got (fog_practice src), 0 = frame you left the ground on", true, 0.0, true, 1.0);
 	g_pDebug   = create_cvar("speed_hud_debug", "0", FCVAR_NONE, "1 = log each takeoff (SPDJ) to addons/amxmodx/logs/fog_debug.log", true, 0.0, true, 1.0);
 	g_pShowDuck = create_cvar("speed_hud_duck", "1", FCVAR_NONE, "1 = show D: frames ducked in the air before the landing", true, 0.0, true, 1.0);
+	g_pShowSpeed   = create_cvar("speed_hud_show_speed", "1", FCVAR_NONE, "1 = show the current speed line", true, 0.0, true, 1.0);
+	g_pShowTakeoff = create_cvar("speed_hud_show_takeoff", "1", FCVAR_NONE, "1 = show the (takeoff speed) line", true, 0.0, true, 1.0);
+	g_pShowDist    = create_cvar("speed_hud_show_dist", "1", FCVAR_NONE, "1 = show Prev: distance of the previous bhop / standup bhop", true, 0.0, true, 1.0);
 
 	register_forward(FM_CmdStart, "fw_CmdStart", 0);
 	register_forward(FM_CmdEnd, "fw_CmdEnd_Post", 1);
@@ -126,7 +147,7 @@ public plugin_cfg()
 enum
 {
 	SM_ITEM_ENABLE = 1, SM_ITEM_FOGMODE, SM_ITEM_DUCK, SM_ITEM_COLOR, SM_ITEM_Y, SM_ITEM_X,
-	SM_ITEM_FOGMAX, SM_ITEM_DEBUG, SM_ITEM_SIZE
+	SM_ITEM_FOGMAX, SM_ITEM_DEBUG, SM_ITEM_SIZE, SM_ITEM_SHOWSPEED, SM_ITEM_SHOWTAKEOFF, SM_ITEM_SHOWDIST
 };
 
 new const g_szColorName[][] = { "white", "green", "yellow", "cyan", "orange", "red", "pink" };
@@ -174,6 +195,18 @@ speed_menu_show(id, page)
 
 	formatex(item, charsmax(item), "HUD: %s", get_pcvar_num(g_pEnable) ? "\yON" : "\rOFF");
 	num_to_str(SM_ITEM_ENABLE, info, charsmax(info));
+	menu_additem(menu, item, info, ADMIN_CVAR);
+
+	formatex(item, charsmax(item), "Current speed: %s", get_pcvar_num(g_pShowSpeed) ? "\yON" : "\rOFF");
+	num_to_str(SM_ITEM_SHOWSPEED, info, charsmax(info));
+	menu_additem(menu, item, info, ADMIN_CVAR);
+
+	formatex(item, charsmax(item), "Takeoff speed: %s", get_pcvar_num(g_pShowTakeoff) ? "\yON" : "\rOFF");
+	num_to_str(SM_ITEM_SHOWTAKEOFF, info, charsmax(info));
+	menu_additem(menu, item, info, ADMIN_CVAR);
+
+	formatex(item, charsmax(item), "Previous jump distance: %s", get_pcvar_num(g_pShowDist) ? "\yON" : "\rOFF");
+	num_to_str(SM_ITEM_SHOWDIST, info, charsmax(info));
 	menu_additem(menu, item, info, ADMIN_CVAR);
 
 	formatex(item, charsmax(item), "FOG shows: \y%s", get_pcvar_num(g_pFogMode) ? "frame of your speed" : "frame you left on");
@@ -240,6 +273,9 @@ public speed_menu_handler(id, menu, item)
 	switch (str_to_num(info))
 	{
 		case SM_ITEM_ENABLE:  set_pcvar_num(g_pEnable, get_pcvar_num(g_pEnable) ? 0 : 1);
+		case SM_ITEM_SHOWSPEED:   set_pcvar_num(g_pShowSpeed, get_pcvar_num(g_pShowSpeed) ? 0 : 1);
+		case SM_ITEM_SHOWTAKEOFF: set_pcvar_num(g_pShowTakeoff, get_pcvar_num(g_pShowTakeoff) ? 0 : 1);
+		case SM_ITEM_SHOWDIST:    set_pcvar_num(g_pShowDist, get_pcvar_num(g_pShowDist) ? 0 : 1);
 		case SM_ITEM_FOGMODE: set_pcvar_num(g_pFogMode, get_pcvar_num(g_pFogMode) ? 0 : 1);
 		case SM_ITEM_DUCK:    set_pcvar_num(g_pShowDuck, get_pcvar_num(g_pShowDuck) ? 0 : 1);
 		case SM_ITEM_SIZE:    set_pcvar_num(g_pStyle, get_pcvar_num(g_pStyle) ? 0 : 1);
@@ -302,6 +338,9 @@ speed_save_cfg()
 	get_pcvar_string(g_pColor, color, charsmax(color));
 	fprintf(f, "// speed_hud settings - written by /speedmenu, exec'd on map start. Delete to reset.^n");
 	fprintf(f, "speed_hud_enable %d^n", get_pcvar_num(g_pEnable));
+	fprintf(f, "speed_hud_show_speed %d^n", get_pcvar_num(g_pShowSpeed));
+	fprintf(f, "speed_hud_show_takeoff %d^n", get_pcvar_num(g_pShowTakeoff));
+	fprintf(f, "speed_hud_show_dist %d^n", get_pcvar_num(g_pShowDist));
 	fprintf(f, "speed_hud_fog_mode %d^n", get_pcvar_num(g_pFogMode));
 	fprintf(f, "speed_hud_duck %d^n", get_pcvar_num(g_pShowDuck));
 	fprintf(f, "speed_hud_keep %d^n", get_pcvar_num(g_pKeep));
@@ -360,6 +399,10 @@ speed_reset(id)
 	g_iTakeoffDuck[id] = -1;
 	g_bPreInDuck[id] = false;
 	g_bTakeoffDD[id] = false;
+	g_bTracking[id] = false;
+	g_bHavePrev[id] = false;
+	g_fPrevDist[id] = 0.0;
+	g_fPrevDz[id] = 0.0;
 }
 
 public cmd_toggle(id)
@@ -385,6 +428,8 @@ public fw_CmdStart(id, uc_handle)
 	g_iPreFlags[id] = pev(id, pev_flags);
 	g_iPreMovetype[id] = pev(id, pev_movetype);
 	g_bPreInDuck[id] = pev(id, pev_bInDuck) != 0;
+	pev(id, pev_origin, g_vPreOrigin[id]);
+	pev(id, pev_velocity, g_vPreVel[id]);
 	return FMRES_IGNORED;
 }
 
@@ -423,6 +468,17 @@ public fw_CmdEnd_Post(id)
 			g_iTakeoffDuck[id] = g_iLandDuck[id];
 			g_iLandDuck[id] = -1;
 			g_bShowTakeoff[id] = true;
+
+			// distance tracking: bhops / standup bhops only (a real jump soon after landing)
+			g_bTracking[id] = !g_bTakeoffDD[id] && g_iTakeoffFog[id] <= BHOP_MAX_FOG;
+			if (g_bTracking[id])
+			{
+				// feet at the start of the takeoff usercmd (an unduck that frame raises the origin
+				// 18 with the bigger hull, so the feet stay where the ducked feet were)
+				g_vJumpPos[id][0] = g_vPreOrigin[id][0];
+				g_vJumpPos[id][1] = g_vPreOrigin[id][1];
+				g_vJumpPos[id][2] = g_vPreOrigin[id][2] - ((g_iPreFlags[id] & FL_DUCKING) ? 18.0 : 36.0);
+			}
 			if (get_pcvar_num(g_pDebug))
 				log_to_file("fog_debug.log", "SPDJ id=%d fog=%d src=%d dd=%d duck=%d xy=%.3f vz=%.3f",
 					id, g_iTakeoffFog[id], g_iTakeoffSrc[id], g_bTakeoffDD[id] ? 1 : 0, g_iTakeoffDuck[id], g_fTakeoff[id], vel[2]);
@@ -450,10 +506,18 @@ public fw_CmdEnd_Post(id)
 			g_bPrevAirDuck[id] = false;
 		}
 
+		// previous-jump distance: abort on ladder / water / noclip or a teleport between usercmds
+		if (g_bTracking[id] && (g_iPreMovetype[id] != MOVETYPE_WALK || postMovetype != MOVETYPE_WALK
+			|| pev(id, pev_waterlevel) > 1 || get_distance_f(g_vPreOrigin[id], g_vLastOrigin[id]) > 64.0))
+			g_bTracking[id] = false;
+		if (g_bTracking[id] && postGround)
+			speed_land(id, postFlags, vel);
+
 		if (g_iPreMovetype[id] == MOVETYPE_FLY && postMovetype == MOVETYPE_WALK && !postGround
 			&& (g_iButtons[id] & IN_JUMP))
 		{
 			// ladder jump: no FOG
+			g_bTracking[id] = false;
 			g_fTakeoff[id] = floatsqroot(vel[0] * vel[0] + vel[1] * vel[1]);
 			g_iTakeoffFog[id] = -1;
 			g_iTakeoffSrc[id] = 0;
@@ -470,9 +534,64 @@ public fw_CmdEnd_Post(id)
 
 	if (!postGround)
 		g_iGround[id] = 0;
+	pev(id, pev_origin, g_vLastOrigin[id]);
 
 	speed_draw(id, vel);
 	return FMRES_IGNORED;
+}
+
+// Landing usercmd of a tracked bhop. Inside this usercmd the player moved (pm_shared.cpp
+// PM_PlayerMove, air branch): PM_AddCorrectGravity (vz -= g/2*dt), PM_AirMove (air accel on xy,
+// then PM_FlyMove), PM_CategorizePosition snapped the feet onto the floor. The feet path is
+// P(t) = P0 + v*t with v = (post-move xy velocity, pre-move vz - g/2*dt); the landing point is
+// where it crosses the floor height (gcljs GetRealLandingOrigin). The hull is the post-move one:
+// PM_Duck runs before the movement.
+speed_land(id, postFlags, const Float:vel[3])
+{
+	g_bTracking[id] = false;
+
+	new Float:post[3];
+	pev(id, pev_origin, post);
+	new Float:hoff = (postFlags & FL_DUCKING) ? 18.0 : 36.0;
+	new Float:landZ = post[2] - hoff;
+	new Float:p0z = g_vPreOrigin[id][2] - hoff;
+
+	new Float:dt = float(g_iMsec[id]) * 0.001;
+	new Float:grav;
+	pev(id, pev_gravity, grav);
+	if (grav == 0.0)
+		grav = 1.0;
+	new Float:vz = g_vPreVel[id][2] - get_cvar_float("sv_gravity") * grav * 0.5 * dt;
+
+	new Float:t = dt;
+	if (vz < 0.0)
+	{
+		t = (p0z - landZ) / -vz;
+		if (t < 0.0)
+			t = 0.0;
+		else if (t > dt)
+			t = dt;
+	}
+	new Float:lx = g_vPreOrigin[id][0] + vel[0] * t;
+	new Float:ly = g_vPreOrigin[id][1] + vel[1] * t;
+	new Float:dx = lx - g_vJumpPos[id][0];
+	new Float:dy = ly - g_vJumpPos[id][1];
+
+	g_fPrevDist[id] = floatsqroot(dx * dx + dy * dy) + BOX_WIDTH;
+	g_fPrevDz[id] = landZ - g_vJumpPos[id][2];
+	g_bHavePrev[id] = true;
+
+	if (get_pcvar_num(g_pDebug))
+		log_to_file("fog_debug.log", "SPDL id=%d dist=%.3f dz=%.3f jump=%.3f,%.3f,%.3f land=%.3f,%.3f,%.3f t=%.5f",
+			id, g_fPrevDist[id], g_fPrevDz[id], g_vJumpPos[id][0], g_vJumpPos[id][1], g_vJumpPos[id][2],
+			lx, ly, landZ, t);
+}
+
+speed_line(text[], len, const line[])
+{
+	if (text[0])
+		add(text, len, "^n");
+	add(text, len, line);
 }
 
 // fog_practice's source frame for this usercmd's takeoff, or 0 if fog_practice is not loaded /
@@ -507,24 +626,47 @@ speed_draw(id, const Float:vel[3])
 			g_iHudMs[id] = 0;
 	}
 
-	new text[96];
-	formatex(text, charsmax(text), "%d", floatround(floatsqroot(vel[0] * vel[0] + vel[1] * vel[1])));
+	new text[128], line[48];
+	text[0] = 0;
+	if (get_pcvar_num(g_pShowSpeed))
+	{
+		formatex(line, charsmax(line), "%d", floatround(floatsqroot(vel[0] * vel[0] + vel[1] * vel[1])));
+		speed_line(text, charsmax(text), line);
+	}
 	if (g_bShowTakeoff[id])
 	{
+		if (get_pcvar_num(g_pShowTakeoff))
+		{
+			formatex(line, charsmax(line), "(%.2f)", g_fTakeoff[id]);
+			speed_line(text, charsmax(text), line);
+		}
 		new fog = g_iTakeoffFog[id];
 		new src = g_iTakeoffSrc[id];
 		if (fog >= 0 && fog <= get_pcvar_num(g_pFogMax))
 		{
 			if (get_pcvar_num(g_pFogMode) && src > 0 && src != fog)
-				format(text, charsmax(text), "%s^n(%.2f)^n%sFOG: %d (f%d)", text, g_fTakeoff[id], g_bTakeoffDD[id] ? "DD " : "", src, fog);
+				formatex(line, charsmax(line), "%sFOG: %d (f%d)", g_bTakeoffDD[id] ? "DD " : "", src, fog);
 			else
-				format(text, charsmax(text), "%s^n(%.2f)^n%sFOG: %d", text, g_fTakeoff[id], g_bTakeoffDD[id] ? "DD " : "", fog);
+				formatex(line, charsmax(line), "%sFOG: %d", g_bTakeoffDD[id] ? "DD " : "", fog);
+			speed_line(text, charsmax(text), line);
 			if (g_iTakeoffDuck[id] >= 0 && get_pcvar_num(g_pShowDuck))
-				format(text, charsmax(text), "%s^nD: %d", text, g_iTakeoffDuck[id]);
+			{
+				formatex(line, charsmax(line), "D: %d", g_iTakeoffDuck[id]);
+				speed_line(text, charsmax(text), line);
+			}
 		}
-		else
-			format(text, charsmax(text), "%s^n(%.2f)", text, g_fTakeoff[id]);
 	}
+	if (g_bHavePrev[id] && get_pcvar_num(g_pShowDist))
+	{
+		new Float:dz = g_fPrevDz[id];
+		if (floatabs(dz) <= OFFSET_TOL)
+			formatex(line, charsmax(line), "Prev: %.3f", g_fPrevDist[id]);
+		else
+			formatex(line, charsmax(line), "Prev: %.3f (%s%.1f)", g_fPrevDist[id], (dz > 0.0) ? "+" : "-", floatabs(dz));
+		speed_line(text, charsmax(text), line);
+	}
+	if (!text[0])
+		return;
 
 	new color[16], rgb[3][4];
 	get_pcvar_string(g_pColor, color, charsmax(color));
