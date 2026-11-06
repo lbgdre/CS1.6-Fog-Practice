@@ -64,7 +64,7 @@
 #define HUD_INTERVAL_MS 10      // big-font redraw every 10 ms of usercmd time (gcljs timing)
 
 new g_pEnable, g_pX, g_pY, g_pColor, g_pFogMax, g_pKeep, g_pHold, g_pFogMode, g_pDebug, g_pShowDuck, g_pStyle;
-new g_pShowSpeed, g_pShowTakeoff, g_pShowDist;
+new g_pShowSpeed, g_pShowTakeoff, g_pShowDist, g_pShowFog;
 
 #define BHOP_MAX_FOG    8       // a jump this soon after landing is a bhop (gcljs MAX_BHOP_FRAMES)
 #define OFFSET_TOL      0.5     // landing height == takeoff height within this (gcljs bhop tolerance)
@@ -97,6 +97,8 @@ new Float:g_vLastOrigin[MAXP][3]; // pev->origin at the previous FM_CmdEnd (tele
 new bool:g_bTracking[MAXP];
 new bool:g_bHavePrev[MAXP];
 new Float:g_fPrevDist[MAXP], Float:g_fPrevDz[MAXP];
+new bool:g_bShowDist[MAXP];          // DIST belongs to the takeoff block currently shown
+new Float:g_fShowDist[MAXP], Float:g_fShowDz[MAXP];
 
 public plugin_init()
 {
@@ -117,6 +119,7 @@ public plugin_init()
 	g_pShowSpeed   = create_cvar("speed_hud_show_speed", "1", FCVAR_NONE, "1 = show the current speed line", true, 0.0, true, 1.0);
 	g_pShowTakeoff = create_cvar("speed_hud_show_takeoff", "1", FCVAR_NONE, "1 = show the (takeoff speed) line", true, 0.0, true, 1.0);
 	g_pShowDist    = create_cvar("speed_hud_show_dist", "1", FCVAR_NONE, "1 = show DIST: distance of the previous bhop / standup bhop", true, 0.0, true, 1.0);
+	g_pShowFog     = create_cvar("speed_hud_show_fog", "1", FCVAR_NONE, "1 = show the FOG: line", true, 0.0, true, 1.0);
 
 	register_forward(FM_CmdStart, "fw_CmdStart", 0);
 	register_forward(FM_CmdEnd, "fw_CmdEnd_Post", 1);
@@ -147,7 +150,7 @@ public plugin_cfg()
 enum
 {
 	SM_ITEM_ENABLE = 1, SM_ITEM_FOGMODE, SM_ITEM_DUCK, SM_ITEM_COLOR, SM_ITEM_Y, SM_ITEM_X,
-	SM_ITEM_FOGMAX, SM_ITEM_DEBUG, SM_ITEM_SIZE, SM_ITEM_SHOWSPEED, SM_ITEM_SHOWTAKEOFF, SM_ITEM_SHOWDIST
+	SM_ITEM_FOGMAX, SM_ITEM_DEBUG, SM_ITEM_SIZE, SM_ITEM_SHOWSPEED, SM_ITEM_SHOWTAKEOFF, SM_ITEM_SHOWDIST, SM_ITEM_SHOWFOG
 };
 
 new const g_szColorName[][] = { "white", "green", "yellow", "cyan", "orange", "red", "pink" };
@@ -203,6 +206,10 @@ speed_menu_show(id, page)
 
 	formatex(item, charsmax(item), "Takeoff speed: %s", get_pcvar_num(g_pShowTakeoff) ? "\yON" : "\rOFF");
 	num_to_str(SM_ITEM_SHOWTAKEOFF, info, charsmax(info));
+	menu_additem(menu, item, info, ADMIN_CVAR);
+
+	formatex(item, charsmax(item), "FOG number: %s", get_pcvar_num(g_pShowFog) ? "\yON" : "\rOFF");
+	num_to_str(SM_ITEM_SHOWFOG, info, charsmax(info));
 	menu_additem(menu, item, info, ADMIN_CVAR);
 
 	formatex(item, charsmax(item), "Previous jump distance: %s", get_pcvar_num(g_pShowDist) ? "\yON" : "\rOFF");
@@ -276,6 +283,7 @@ public speed_menu_handler(id, menu, item)
 		case SM_ITEM_SHOWSPEED:   set_pcvar_num(g_pShowSpeed, get_pcvar_num(g_pShowSpeed) ? 0 : 1);
 		case SM_ITEM_SHOWTAKEOFF: set_pcvar_num(g_pShowTakeoff, get_pcvar_num(g_pShowTakeoff) ? 0 : 1);
 		case SM_ITEM_SHOWDIST:    set_pcvar_num(g_pShowDist, get_pcvar_num(g_pShowDist) ? 0 : 1);
+		case SM_ITEM_SHOWFOG:     set_pcvar_num(g_pShowFog, get_pcvar_num(g_pShowFog) ? 0 : 1);
 		case SM_ITEM_FOGMODE: set_pcvar_num(g_pFogMode, get_pcvar_num(g_pFogMode) ? 0 : 1);
 		case SM_ITEM_DUCK:    set_pcvar_num(g_pShowDuck, get_pcvar_num(g_pShowDuck) ? 0 : 1);
 		case SM_ITEM_SIZE:    set_pcvar_num(g_pStyle, get_pcvar_num(g_pStyle) ? 0 : 1);
@@ -341,6 +349,7 @@ speed_save_cfg()
 	fprintf(f, "speed_hud_show_speed %d^n", get_pcvar_num(g_pShowSpeed));
 	fprintf(f, "speed_hud_show_takeoff %d^n", get_pcvar_num(g_pShowTakeoff));
 	fprintf(f, "speed_hud_show_dist %d^n", get_pcvar_num(g_pShowDist));
+	fprintf(f, "speed_hud_show_fog %d^n", get_pcvar_num(g_pShowFog));
 	fprintf(f, "speed_hud_fog_mode %d^n", get_pcvar_num(g_pFogMode));
 	fprintf(f, "speed_hud_duck %d^n", get_pcvar_num(g_pShowDuck));
 	fprintf(f, "speed_hud_keep %d^n", get_pcvar_num(g_pKeep));
@@ -403,6 +412,7 @@ speed_reset(id)
 	g_bHavePrev[id] = false;
 	g_fPrevDist[id] = 0.0;
 	g_fPrevDz[id] = 0.0;
+	g_bShowDist[id] = false;
 }
 
 public cmd_toggle(id)
@@ -469,6 +479,13 @@ public fw_CmdEnd_Post(id)
 			g_iLandDuck[id] = -1;
 			g_bShowTakeoff[id] = true;
 
+			// DIST shown with this takeoff = distance of the jump you just landed from (shown and
+			// hidden together with FOG / D, so it stays in sync with them)
+			g_bShowDist[id] = g_bHavePrev[id];
+			g_fShowDist[id] = g_fPrevDist[id];
+			g_fShowDz[id] = g_fPrevDz[id];
+			g_bHavePrev[id] = false;
+
 			// distance tracking: bhops / standup bhops only (a real jump soon after landing)
 			g_bTracking[id] = !g_bTakeoffDD[id] && g_iTakeoffFog[id] <= BHOP_MAX_FOG;
 			if (g_bTracking[id])
@@ -510,14 +527,20 @@ public fw_CmdEnd_Post(id)
 		if (g_bTracking[id] && (g_iPreMovetype[id] != MOVETYPE_WALK || postMovetype != MOVETYPE_WALK
 			|| pev(id, pev_waterlevel) > 1 || get_distance_f(g_vPreOrigin[id], g_vLastOrigin[id]) > 64.0))
 			g_bTracking[id] = false;
-		if (g_bTracking[id] && postGround)
-			speed_land(id, postFlags, vel);
+		if (postGround)
+		{
+			if (g_bTracking[id])
+				speed_land(id, postFlags, vel);
+			else
+				g_bHavePrev[id] = false;
+		}
 
 		if (g_iPreMovetype[id] == MOVETYPE_FLY && postMovetype == MOVETYPE_WALK && !postGround
 			&& (g_iButtons[id] & IN_JUMP))
 		{
-			// ladder jump: no FOG
+			// ladder jump: no FOG, no DIST
 			g_bTracking[id] = false;
+			g_bShowDist[id] = false;
 			g_fTakeoff[id] = floatsqroot(vel[0] * vel[0] + vel[1] * vel[1]);
 			g_iTakeoffFog[id] = -1;
 			g_iTakeoffSrc[id] = 0;
@@ -644,11 +667,14 @@ speed_draw(id, const Float:vel[3])
 		new src = g_iTakeoffSrc[id];
 		if (fog >= 0 && fog <= get_pcvar_num(g_pFogMax))
 		{
-			if (get_pcvar_num(g_pFogMode) && src > 0 && src != fog)
-				formatex(line, charsmax(line), "%sFOG: %d (f%d)", g_bTakeoffDD[id] ? "DD " : "", src, fog);
-			else
-				formatex(line, charsmax(line), "%sFOG: %d", g_bTakeoffDD[id] ? "DD " : "", fog);
-			speed_line(text, charsmax(text), line);
+			if (get_pcvar_num(g_pShowFog))
+			{
+				if (get_pcvar_num(g_pFogMode) && src > 0 && src != fog)
+					formatex(line, charsmax(line), "%sFOG: %d (f%d)", g_bTakeoffDD[id] ? "DD " : "", src, fog);
+				else
+					formatex(line, charsmax(line), "%sFOG: %d", g_bTakeoffDD[id] ? "DD " : "", fog);
+				speed_line(text, charsmax(text), line);
+			}
 			if (g_iTakeoffDuck[id] >= 0 && get_pcvar_num(g_pShowDuck))
 			{
 				formatex(line, charsmax(line), "D: %d", g_iTakeoffDuck[id]);
@@ -656,13 +682,13 @@ speed_draw(id, const Float:vel[3])
 			}
 		}
 	}
-	if (g_bHavePrev[id] && get_pcvar_num(g_pShowDist))
+	if (g_bShowTakeoff[id] && g_bShowDist[id] && get_pcvar_num(g_pShowDist))
 	{
-		new Float:dz = g_fPrevDz[id];
+		new Float:dz = g_fShowDz[id];
 		if (floatabs(dz) <= OFFSET_TOL)
-			formatex(line, charsmax(line), "DIST: %.3f", g_fPrevDist[id]);
+			formatex(line, charsmax(line), "DIST: %.3f", g_fShowDist[id]);
 		else
-			formatex(line, charsmax(line), "DIST: %.3f (%s%.1f)", g_fPrevDist[id], (dz > 0.0) ? "+" : "-", floatabs(dz));
+			formatex(line, charsmax(line), "DIST: %.3f (%s%.1f)", g_fShowDist[id], (dz > 0.0) ? "+" : "-", floatabs(dz));
 		speed_line(text, charsmax(text), line);
 	}
 	if (!text[0])
