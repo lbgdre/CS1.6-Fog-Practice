@@ -87,16 +87,6 @@ DIST: 248.312   distance of the bhop / standup bhop you just landed from
 - `DD FOG: 2`: the takeoff was a double duck. The best possible is 2, or 3 after landing ducked.
 - `DIST: 248.312 (+1.6)`: you landed 1.6 units higher than you took off (offset jump).
 
-## Optional: check the plugin against the engine
-
-With **Debug output** on, play a bit, then run:
-
-```
-python tools/fog_reference.py check <Half-Life>\cstrike\addons\amxmodx\logs\fog_debug.log
-```
-
-Technical details are in [docs/TECHNICAL.md](docs/TECHNICAL.md).
-
 ## Credits
 
 * The speed HUD layout follows the speed panel of [gcljs](https://codeberg.org/GameChaos/gcljs) by GameChaos.
